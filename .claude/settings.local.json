@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($body = '{\"email\":\"jpalacios@smartbeemo.com\",\"nombre\":\"Jessica Palacios\",\"password\":\"CambiameAhora123\"}'; try { $r = Invoke-RestMethod -Uri \"https://cobros-dashboard.vercel.app/api/setup\" -Method POST -ContentType \"application/json\" -Body $body; $r } catch { $_.Exception.Response.GetResponseStream\\(\\) | ForEach-Object { $reader = New-Object System.IO.StreamReader\\($_\\); $reader.ReadToEnd\\(\\) } })"
+    ]
+  }
+}

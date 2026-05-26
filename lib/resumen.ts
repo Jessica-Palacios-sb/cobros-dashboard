@@ -56,7 +56,13 @@ function merge(dest: Map<string, AggRaw>, rows: AggRaw[]) {
 
 // ─── Redshift: cobros agregados ───────────────────────────────────────────────
 
-async function rsCobroAgg(fd: string, fh: string, corte: string): Promise<AggRaw[]> {
+async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
+  const params: Param[] = [fd, fh, corte];
+  let extraWhere = "";
+  if (gestor) {
+    params.push(`%${gestor}%`);
+    extraWhere = `AND (COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length})`;
+  }
   const rows = await runQuery(`
     ${BASE_CTE}
     SELECT
@@ -71,8 +77,9 @@ async function rsCobroAgg(fd: string, fh: string, corte: string): Promise<AggRaw
       AND payment_amount_usd        >  0
       AND fecha_hora_cierre_real    IS NOT NULL
       AND fecha_hora_apertura_real  <  $3
+      ${extraWhere}
     GROUP BY 1, 2
-  `, [fd, fh, corte] as Param[]);
+  `, params);
 
   return rows.map(r => ({
     hora:        Number(r.hora       ?? 0),
@@ -84,7 +91,13 @@ async function rsCobroAgg(fd: string, fh: string, corte: string): Promise<AggRaw
 
 // ─── Redshift: adelantos agregados ───────────────────────────────────────────
 
-async function rsAdelAgg(fd: string, fh: string, corte: string): Promise<AggRaw[]> {
+async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
+  const params: Param[] = [fd, fh, corte];
+  let extraWhere = "";
+  if (gestor) {
+    params.push(`%${gestor}%`);
+    extraWhere = `AND COALESCE(a.propietario, '') ILIKE $${params.length}`;
+  }
   const rows = await runQuery(`
     ${CTE_ADL}
     SELECT
@@ -100,8 +113,9 @@ async function rsAdelAgg(fd: string, fh: string, corte: string): Promise<AggRaw[
       AND CAST(i.fecha_pago AS date) >= $1
       AND CAST(i.fecha_pago AS date) <= $2
       AND CAST(i.fecha_pago AS date) <  $3
+      ${extraWhere}
     GROUP BY 1, 2
-  `, [fd, fh, corte] as Param[]);
+  `, params);
 
   return rows.map(r => ({
     hora:        Number(r.hora       ?? 0),
@@ -113,7 +127,7 @@ async function rsAdelAgg(fd: string, fh: string, corte: string): Promise<AggRaw[
 
 // ─── Salesforce: cobros de hoy agregados ──────────────────────────────────────
 
-async function sfCobroAggHoy(): Promise<AggRaw[]> {
+async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
   const [casos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name
       FROM Case
@@ -137,6 +151,7 @@ async function sfCobroAggHoy(): Promise<AggRaw[]> {
   const facByCaso = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_CASO_del__c) facByCaso.set(String(fac.SBEEMO_RB_CASO_del__c), fac);
 
+  const re = gestor ? new RegExp(gestor, "i") : null;
   const out: AggRaw[] = [];
   for (const c of casos) {
     const inv  = invByAccount.get(String(c.AccountId ?? ""));
@@ -145,19 +160,16 @@ async function sfCobroAggHoy(): Promise<AggRaw[]> {
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
     if (pago <= 0 || !c.ClosedDate) continue;
-    out.push({
-      hora:        horaBO(String(c.ClosedDate)),
-      propietario: String((c.Owner as FilaSF | undefined)?.Name ?? ""),
-      cant:        1,
-      cashTotal:   pago,
-    });
+    const prop = String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    if (re && !re.test(prop)) continue;
+    out.push({ hora: horaBO(String(c.ClosedDate)), propietario: prop, cant: 1, cashTotal: pago });
   }
   return out;
 }
 
 // ─── Salesforce: adelantos de hoy agregados ───────────────────────────────────
 
-async function sfAdelAggHoy(): Promise<AggRaw[]> {
+async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
   const [acuerdos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, SBEEMO_FE_ACUERDO_PAGO__c,
         SBEEMO_RB_CASO__r.LastModifiedDate, SBEEMO_RB_CASO__r.AccountId, Owner.Name
@@ -185,6 +197,7 @@ async function sfAdelAggHoy(): Promise<AggRaw[]> {
   const facByAccount = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_ACCOUNT__c) facByAccount.set(String(fac.SBEEMO_RB_ACCOUNT__c), fac);
 
+  const re = gestor ? new RegExp(gestor, "i") : null;
   const out: AggRaw[] = [];
   for (const ac of acuerdos) {
     const caso      = ac.SBEEMO_RB_CASO__r as FilaSF | undefined;
@@ -196,12 +209,9 @@ async function sfAdelAggHoy(): Promise<AggRaw[]> {
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
     const lastMod = String(caso?.LastModifiedDate ?? "");
     if (pago <= 0 || !lastMod) continue;
-    out.push({
-      hora:        horaBO(lastMod),
-      propietario: String((ac.Owner as FilaSF | undefined)?.Name ?? ""),
-      cant:        1,
-      cashTotal:   pago,
-    });
+    const prop = String((ac.Owner as FilaSF | undefined)?.Name ?? "");
+    if (re && !re.test(prop)) continue;
+    out.push({ hora: horaBO(lastMod), propietario: prop, cant: 1, cashTotal: pago });
   }
   return out;
 }
@@ -232,7 +242,8 @@ function toResumen(
 
 export async function getResumen(
   fechaDesde: string,
-  fechaHasta: string
+  fechaHasta: string,
+  gestor?: string
 ): Promise<ResultadoResumen> {
   const corte    = corteHoy();
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
@@ -242,15 +253,15 @@ export async function getResumen(
 
   // Queries en paralelo: Redshift (cobros + adelantos) + SF si aplica
   const sfP = sfActivo && incluyeHoy
-    ? Promise.all([sfCobroAggHoy(), sfAdelAggHoy()]).catch((e: any) => {
+    ? Promise.all([sfCobroAggHoy(gestor), sfAdelAggHoy(gestor)]).catch((e: any) => {
         sfError = String(e?.message ?? e);
         return [[], []] as [AggRaw[], AggRaw[]];
       })
     : Promise.resolve<[AggRaw[], AggRaw[]]>([[], []]);
 
   const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows]] = await Promise.all([
-    rsCobroAgg(fechaDesde, fechaHasta, corte),
-    rsAdelAgg(fechaDesde, fechaHasta, corte),
+    rsCobroAgg(fechaDesde, fechaHasta, corte, gestor),
+    rsAdelAgg(fechaDesde, fechaHasta, corte, gestor),
     sfP,
   ]);
 

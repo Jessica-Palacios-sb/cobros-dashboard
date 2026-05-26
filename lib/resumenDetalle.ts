@@ -51,7 +51,7 @@ WITH adelanto AS (
 
 async function rsCobroDetalle(
   fd: string, fh: string, corte: string,
-  hora?: number, propietario?: string
+  hora?: number, propietario?: string, gestor?: string
 ): Promise<FilaDetalle[]> {
   const params: Param[] = [fd, fh, corte];
   const extra: string[] = [];
@@ -63,6 +63,10 @@ async function rsCobroDetalle(
   if (propietario !== undefined) {
     params.push(propietario);
     extra.push(`COALESCE(propietario, '—') = $${params.length}`);
+  }
+  if (gestor) {
+    params.push(`%${gestor}%`);
+    extra.push(`(COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length})`);
   }
 
   const rows = await runQuery(`
@@ -105,7 +109,7 @@ async function rsCobroDetalle(
 
 async function rsAdelDetalle(
   fd: string, fh: string, corte: string,
-  hora?: number, propietario?: string
+  hora?: number, propietario?: string, gestor?: string
 ): Promise<FilaDetalle[]> {
   const params: Param[] = [fd, fh, corte];
   const extra: string[] = [];
@@ -117,6 +121,10 @@ async function rsAdelDetalle(
   if (propietario !== undefined) {
     params.push(propietario);
     extra.push(`COALESCE(a.propietario, '—') = $${params.length}`);
+  }
+  if (gestor) {
+    params.push(`%${gestor}%`);
+    extra.push(`COALESCE(a.propietario, '') ILIKE $${params.length}`);
   }
 
   const rows = await runQuery(`
@@ -157,7 +165,7 @@ async function rsAdelDetalle(
 
 // ─── Salesforce: cobros de hoy individuales ───────────────────────────────────
 
-async function sfCobroDetalleHoy(hora?: number, propietario?: string): Promise<FilaDetalle[]> {
+async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: string): Promise<FilaDetalle[]> {
   const [casos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, CaseNumber, ClosedDate, AccountId, Owner.Name, RecordType.Name
       FROM Case
@@ -180,6 +188,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string): Promise<F
   const facByCaso = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_CASO_del__c) facByCaso.set(String(fac.SBEEMO_RB_CASO_del__c), fac);
 
+  const gestorRe = gestor ? new RegExp(gestor, "i") : null;
   const out: FilaDetalle[] = [];
   for (const c of casos) {
     const inv   = invByAccount.get(String(c.AccountId ?? ""));
@@ -194,6 +203,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string): Promise<F
 
     if (hora !== undefined && horaReg !== hora) continue;
     if (propietario !== undefined && prop !== propietario) continue;
+    if (gestorRe && !gestorRe.test(prop)) continue;
 
     out.push({
       id:          String(c.Id ?? ""),
@@ -212,7 +222,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string): Promise<F
 
 // ─── Salesforce: adelantos de hoy individuales ───────────────────────────────
 
-async function sfAdelDetalleHoy(hora?: number, propietario?: string): Promise<FilaDetalle[]> {
+async function sfAdelDetalleHoy(hora?: number, propietario?: string, gestor?: string): Promise<FilaDetalle[]> {
   const [acuerdos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, Name, SBEEMO_FE_ACUERDO_PAGO__c, SBEEMO_LS_TIPO__c,
         SBEEMO_RB_CASO__r.LastModifiedDate, SBEEMO_RB_CASO__r.AccountId, Owner.Name
@@ -239,6 +249,7 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string): Promise<Fi
   const facByAccount = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_ACCOUNT__c) facByAccount.set(String(fac.SBEEMO_RB_ACCOUNT__c), fac);
 
+  const gestorRe = gestor ? new RegExp(gestor, "i") : null;
   const out: FilaDetalle[] = [];
   for (const ac of acuerdos) {
     const caso      = ac.SBEEMO_RB_CASO__r as FilaSF | undefined;
@@ -256,6 +267,7 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string): Promise<Fi
 
     if (hora !== undefined && horaReg !== hora) continue;
     if (propietario !== undefined && prop !== propietario) continue;
+    if (gestorRe && !gestorRe.test(prop)) continue;
 
     out.push({
       id:          String(ac.Id ?? ""),
@@ -278,7 +290,8 @@ export async function getResumenDetalle(
   fechaDesde: string,
   fechaHasta: string,
   hora?: number,
-  propietario?: string
+  propietario?: string,
+  gestor?: string
 ): Promise<ResultadoDetalle> {
   const corte    = corteHoy();
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
@@ -288,8 +301,8 @@ export async function getResumenDetalle(
 
   const sfP = sfActivo && incluyeHoy
     ? Promise.all([
-        sfCobroDetalleHoy(hora, propietario),
-        sfAdelDetalleHoy(hora, propietario),
+        sfCobroDetalleHoy(hora, propietario, gestor),
+        sfAdelDetalleHoy(hora, propietario, gestor),
       ]).catch((e: any) => {
         sfError = String(e?.message ?? e);
         return [[], []] as [FilaDetalle[], FilaDetalle[]];
@@ -297,8 +310,8 @@ export async function getResumenDetalle(
     : Promise.resolve<[FilaDetalle[], FilaDetalle[]]>([[], []]);
 
   const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows]] = await Promise.all([
-    rsCobroDetalle(fechaDesde, fechaHasta, corte, hora, propietario),
-    rsAdelDetalle(fechaDesde, fechaHasta, corte, hora, propietario),
+    rsCobroDetalle(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
+    rsAdelDetalle(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
     sfP,
   ]);
 

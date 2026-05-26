@@ -14,11 +14,12 @@ export async function GET(req: NextRequest) {
   const fechaDesde  = sp.get("fechaDesde") ?? "";
   const fechaHasta  = sp.get("fechaHasta") ?? "";
   const horaStr     = sp.get("hora");
-  const propietario = sp.get("propietario") ?? undefined;
+  const propietario = sp.get("propietario") || undefined;
+  const gestor      = sp.get("gestor") || undefined;
   const hora        = horaStr !== null && horaStr !== "" ? Number(horaStr) : undefined;
 
   try {
-    const resultado = await getResumenDetalle(fechaDesde, fechaHasta, hora, propietario);
+    const resultado = await getResumenDetalle(fechaDesde, fechaHasta, hora, propietario, gestor);
     return NextResponse.json(resultado);
   } catch (e: any) {
     console.error("Error en /api/resumen/detalle:", e);

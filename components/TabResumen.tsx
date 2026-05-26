@@ -39,9 +39,10 @@ interface TablaResumenProps {
   label: string;
   formatKey: (k: string) => string;
   onDetalle: (key: string) => void;
+  onDetalleTotal: () => void;
 }
 
-function TablaResumen({ filas, label, formatKey, onDetalle }: TablaResumenProps) {
+function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: TablaResumenProps) {
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
 
@@ -81,7 +82,11 @@ function TablaResumen({ filas, label, formatKey, onDetalle }: TablaResumenProps)
           <tfoot>
             <tr>
               <td><strong>Total</strong></td>
-              <td style={{ textAlign: "right" }}><strong>{fmtNum(total)}</strong></td>
+              <td style={{ textAlign: "right" }}>
+                <button className="cant-detalle" onClick={onDetalleTotal} title="Ver todos">
+                  <strong>{fmtNum(total)}</strong>
+                </button>
+              </td>
               <td style={{ textAlign: "right" }}><strong>{fmtUSD.format(totalCash)}</strong></td>
               <td style={{ textAlign: "right" }}>
                 <strong>{total > 0 ? fmtUSD.format(totalCash / total) : "—"}</strong>
@@ -113,18 +118,20 @@ export default function TabResumen() {
   const [periodo, setPeriodo] = useState<Periodo>("hoy");
   const [fechaDesde, setFechaDesde] = useState(hoyBogota());
   const [fechaHasta, setFechaHasta] = useState(hoyBogota());
+  const [gestor, setGestor] = useState("");
   const [datos, setDatos] = useState<ResultadoResumen | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
-  const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string }>({ fd: hoyBogota(), fh: hoyBogota() });
+  const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string; gestor?: string }>({ fd: hoyBogota(), fh: hoyBogota() });
   const [modal, setModal] = useState<ModalState | null>(null);
 
-  const cargar = useCallback(async (fd: string, fh: string) => {
-    setRangoActivo({ fd, fh });
+  const cargar = useCallback(async (fd: string, fh: string, gest?: string) => {
+    setRangoActivo({ fd, fh, gestor: gest });
     setCargando(true);
     setError("");
     try {
       const q = new URLSearchParams({ fechaDesde: fd, fechaHasta: fh });
+      if (gest) q.set("gestor", gest);
       const res = await fetch(`/api/resumen?${q}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -143,19 +150,19 @@ export default function TabResumen() {
 
   useEffect(() => {
     const [fd, fh] = rango("hoy", fechaDesde, fechaHasta);
-    cargar(fd, fh);
-  }, [cargar]);
+    cargar(fd, fh, gestor || undefined);
+  }, [cargar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aplicar = () => {
     const [fd, fh] = rango(periodo, fechaDesde, fechaHasta);
-    cargar(fd, fh);
+    cargar(fd, fh, gestor || undefined);
   };
 
   const handlePeriodo = (p: Periodo) => {
     setPeriodo(p);
     if (p !== "custom") {
       const [fd, fh] = rango(p, fechaDesde, fechaHasta);
-      cargar(fd, fh);
+      cargar(fd, fh, gestor || undefined);
     }
   };
 
@@ -203,11 +210,24 @@ export default function TabResumen() {
           </>
         )}
 
+        <div className="campo">
+          <label>Gestor / Propietario</label>
+          <input
+            placeholder="ej: Julie, Eduar…"
+            value={gestor}
+            onChange={(e) => setGestor(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && aplicar()}
+          />
+        </div>
+
+        <button className="btn" onClick={aplicar} disabled={cargando}>
+          Aplicar
+        </button>
+
         <button
           className="btn btn-ghost"
           onClick={aplicar}
           disabled={cargando}
-          style={{ marginLeft: periodo === "custom" ? 0 : "auto" }}
         >
           {cargando ? <><span className="spinner" /> Actualizando…</> : "↻ Actualizar"}
         </button>
@@ -252,12 +272,14 @@ export default function TabResumen() {
             label="Por hora"
             formatKey={formatHora}
             onDetalle={(key) => setModal({ titulo: formatHora(key), hora: Number(key) })}
+            onDetalleTotal={() => setModal({ titulo: "Total del período" })}
           />
           <TablaResumen
             filas={datos.porPropietario}
             label="Por propietario"
             formatKey={(k) => k || "—"}
             onDetalle={(key) => setModal({ titulo: key || "—", propietario: key })}
+            onDetalleTotal={() => setModal({ titulo: "Total del período" })}
           />
         </div>
       )}
@@ -269,6 +291,7 @@ export default function TabResumen() {
           fechaHasta={rangoActivo.fh}
           hora={modal.hora}
           propietario={modal.propietario}
+          gestor={rangoActivo.gestor}
           onClose={() => setModal(null)}
         />
       )}

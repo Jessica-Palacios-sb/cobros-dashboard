@@ -13,9 +13,10 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const fechaDesde = searchParams.get("fechaDesde") ?? "";
   const fechaHasta = searchParams.get("fechaHasta") ?? "";
+  const gestor     = searchParams.get("gestor") || undefined;
 
   try {
-    const resultado = await getResumen(fechaDesde, fechaHasta);
+    const resultado = await getResumen(fechaDesde, fechaHasta, gestor);
     return NextResponse.json(resultado);
   } catch (e: any) {
     console.error("Error en /api/resumen:", e);

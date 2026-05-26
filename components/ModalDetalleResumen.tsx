@@ -26,10 +26,35 @@ interface Props {
   fechaHasta: string;
   hora?: number;
   propietario?: string;
+  gestor?: string;
   onClose: () => void;
 }
 
-export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, hora, propietario, onClose }: Props) {
+function descargarCSV(filas: FilaDetalle[], titulo: string) {
+  const cabeceras = ["Tipo", "Sub tipo", "Número", "Propietario", "Hora", "Fecha Pago", "Payment Amount USD", "Origen"];
+  const filasCsv = filas.map(f => [
+    f.tipo,
+    f.subTipo || "",
+    f.numero,
+    f.propietario,
+    formatHora(f.hora),
+    f.fechaPago,
+    f.monto,
+    f.origen,
+  ]);
+  const csv = [cabeceras, ...filasCsv]
+    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `detalle-${titulo.replace(/[^a-z0-9]/gi, "_")}-${new Date().toISOString().substring(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, hora, propietario, gestor, onClose }: Props) {
   const [filas, setFilas]     = useState<FilaDetalle[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError]     = useState("");
@@ -42,6 +67,7 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
     const q = new URLSearchParams({ fechaDesde, fechaHasta });
     if (hora !== undefined) q.set("hora", String(hora));
     if (propietario)        q.set("propietario", propietario);
+    if (gestor)             q.set("gestor", gestor);
 
     fetch(`/api/resumen/detalle?${q}`, { signal: ctrl.signal })
       .then(async (res) => {
@@ -62,7 +88,7 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
       .finally(() => setCargando(false));
 
     return () => ctrl.abort();
-  }, [fechaDesde, fechaHasta, hora, propietario]);
+  }, [fechaDesde, fechaHasta, hora, propietario, gestor]);
 
   // Cerrar con Escape
   useEffect(() => {
@@ -88,7 +114,14 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
               </span>
             )}
           </div>
-          <button className="modal-cerrar" onClick={onClose}>✕</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {!cargando && filas.length > 0 && (
+              <button className="btn btn-ghost" onClick={() => descargarCSV(filas, titulo)}>
+                ↓ Descargar CSV
+              </button>
+            )}
+            <button className="modal-cerrar" onClick={onClose}>✕</button>
+          </div>
         </div>
 
         {/* Contenido */}

@@ -299,6 +299,43 @@ select {
   align-self: center;
 }
 
+/* ===== Tablas de resumen ===== */
+.resumen-tablas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .resumen-tablas { grid-template-columns: 1fr; }
+}
+
+.tabla-resumen-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tabla-resumen-titulo {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabla-resumen-wrap tfoot tr td {
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
 /* ===== Barra de acciones ===== */
 .acciones {
   display: flex;

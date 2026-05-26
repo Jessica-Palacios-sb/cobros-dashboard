@@ -130,3 +130,21 @@ export interface FiltrosAdelanto {
   propietario?: string[];
   busqueda?: string;     // correo o número de caso
 }
+
+// ─── Resumen ──────────────────────────────────────────────────────────────────
+
+export interface FilaResumen {
+  key: string;
+  cant: number;
+  cashTotal: number;
+  ticket: number;
+  pct: number;
+}
+
+export interface ResultadoResumen {
+  porHora: FilaResumen[];
+  porPropietario: FilaResumen[];
+  totales: { cant: number; cashTotal: number; ticket: number };
+  actualizadoEn: string;
+  sfError?: string;
+}

@@ -79,7 +79,7 @@ async function rsCobroDetalle(
       ,'Cobro'                                                                              AS tipo
       ,COALESCE(sub_tipo_caso, '')                                                          AS sub_tipo
       ,EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int  AS hora
-      ,COALESCE(propietario, '—')                                                           AS propietario
+      ,CASE WHEN sub_tipo_caso = 'Adelanto de cuotas' THEN 'Agente' ELSE COALESCE(propietario, '—') END AS propietario
       ,CAST(fecha_pago AS date)                                                             AS fecha_pago
       ,COALESCE(payment_amount_usd, 0)                                                     AS monto
     FROM cobros_base
@@ -207,8 +207,11 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
     if (monto <= 0 || !c.ClosedDate) continue;
 
-    const horaReg = horaBO(String(c.ClosedDate));
-    const prop    = String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const horaReg  = horaBO(String(c.ClosedDate));
+    const subTipoSF = String((c.RecordType as FilaSF | undefined)?.Name ?? "");
+    const prop     = subTipoSF === "Adelanto de cuotas"
+      ? "Agente"
+      : String((c.Owner as FilaSF | undefined)?.Name ?? "");
 
     if (hora !== undefined && horaReg !== hora) continue;
     if (propietario !== undefined && prop !== propietario) continue;
@@ -219,7 +222,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
       id:          String(c.Id ?? ""),
       numero:      String(c.CaseNumber ?? ""),
       tipo:        "Cobro",
-      subTipo:     String((c.RecordType as FilaSF | undefined)?.Name ?? ""),
+      subTipo:     subTipoSF,
       hora:        horaReg,
       propietario: prop,
       fechaPago:   String(inv?.SBEEMO_FE_FECHA_PAGO__c ?? fac?.SBEEMO_FE_FECHA_PAGO__c ?? ""),

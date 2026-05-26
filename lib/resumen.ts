@@ -69,7 +69,7 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
     ${BASE_CTE}
     SELECT
        EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int AS hora
-      ,COALESCE(propietario, '—')                                                          AS propietario
+      ,CASE WHEN sub_tipo_caso = 'Adelanto de cuotas' THEN 'Agente' ELSE COALESCE(propietario, '—') END AS propietario
       ,COUNT(*)                                                                             AS cant
       ,COALESCE(SUM(payment_amount_usd), 0)                                                AS cash_total
     FROM cobros_base
@@ -138,7 +138,7 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
 
 async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
   const [casos, invoices, facturas] = await Promise.all([
-    querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name
+    querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId
       FROM Case
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
@@ -169,7 +169,9 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
     if (pago <= 0 || !c.ClosedDate) continue;
-    const prop = String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const prop = String(c.RecordTypeId ?? "") === "012UH000009AltJYAS"
+      ? "Agente"
+      : String((c.Owner as FilaSF | undefined)?.Name ?? "");
     if (gestor === "__null__" && prop !== "") continue;
     if (re && !re.test(prop)) continue;
     out.push({ hora: horaBO(String(c.ClosedDate)), propietario: prop, cant: 1, cashTotal: pago });

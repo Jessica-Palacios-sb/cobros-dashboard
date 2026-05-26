@@ -63,13 +63,14 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
     extraWhere = `AND (gestor IS NULL OR gestor = '') AND (propietario IS NULL OR propietario = '')`;
   } else if (gestor) {
     params.push(`%${gestor}%`);
-    extraWhere = `AND (COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length})`;
+    const adelantoCond = gestor === "Agente" ? ` OR sub_tipo_caso = 'Adelanto de cuotas'` : "";
+    extraWhere = `AND (COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length}${adelantoCond})`;
   }
   const rows = await runQuery(`
     ${BASE_CTE}
     SELECT
        EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int AS hora
-      ,CASE WHEN sub_tipo_caso = 'Adelanto de cuotas' THEN 'Agente' ELSE COALESCE(propietario, '—') END AS propietario
+      ,COALESCE(propietario, '—')                                                          AS propietario
       ,COUNT(*)                                                                             AS cant
       ,COALESCE(SUM(payment_amount_usd), 0)                                                AS cash_total
     FROM cobros_base
@@ -169,11 +170,10 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
     if (pago <= 0 || !c.ClosedDate) continue;
-    const prop = String(c.RecordTypeId ?? "") === "012UH000009AltJYAS"
-      ? "Agente"
-      : String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const prop = String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const isAdelantoCuotas = String(c.RecordTypeId ?? "") === "012UH000009AltJYAS";
     if (gestor === "__null__" && prop !== "") continue;
-    if (re && !re.test(prop)) continue;
+    if (re && !re.test(prop) && !(gestor === "Agente" && isAdelantoCuotas)) continue;
     out.push({ hora: horaBO(String(c.ClosedDate)), propietario: prop, cant: 1, cashTotal: pago });
   }
   return out;

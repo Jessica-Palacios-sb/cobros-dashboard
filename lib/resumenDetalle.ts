@@ -68,7 +68,8 @@ async function rsCobroDetalle(
     extra.push(`(gestor IS NULL OR gestor = '') AND (propietario IS NULL OR propietario = '')`);
   } else if (gestor) {
     params.push(`%${gestor}%`);
-    extra.push(`(COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length})`);
+    const adelantoCond = gestor === "Agente" ? ` OR sub_tipo_caso = 'Adelanto de cuotas'` : "";
+    extra.push(`(COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length}${adelantoCond})`);
   }
 
   const rows = await runQuery(`
@@ -79,7 +80,7 @@ async function rsCobroDetalle(
       ,'Cobro'                                                                              AS tipo
       ,COALESCE(sub_tipo_caso, '')                                                          AS sub_tipo
       ,EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int  AS hora
-      ,CASE WHEN sub_tipo_caso = 'Adelanto de cuotas' THEN 'Agente' ELSE COALESCE(propietario, '—') END AS propietario
+      ,COALESCE(propietario, '—')                                                           AS propietario
       ,CAST(fecha_pago AS date)                                                             AS fecha_pago
       ,COALESCE(payment_amount_usd, 0)                                                     AS monto
     FROM cobros_base
@@ -207,16 +208,15 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
     if (monto <= 0 || !c.ClosedDate) continue;
 
-    const horaReg  = horaBO(String(c.ClosedDate));
+    const horaReg = horaBO(String(c.ClosedDate));
     const subTipoSF = String((c.RecordType as FilaSF | undefined)?.Name ?? "");
-    const prop     = subTipoSF === "Adelanto de cuotas"
-      ? "Agente"
-      : String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const prop    = String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const isAdelantoCuotas = subTipoSF === "Adelanto de cuotas";
 
     if (hora !== undefined && horaReg !== hora) continue;
     if (propietario !== undefined && prop !== propietario) continue;
     if (gestor === "__null__" && prop !== "") continue;
-    if (gestorRe && !gestorRe.test(prop)) continue;
+    if (gestorRe && !gestorRe.test(prop) && !(gestor === "Agente" && isAdelantoCuotas)) continue;
 
     out.push({
       id:          String(c.Id ?? ""),

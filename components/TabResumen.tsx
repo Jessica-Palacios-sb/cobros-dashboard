@@ -211,13 +211,13 @@ export default function TabResumen() {
         )}
 
         <div className="campo">
-          <label>Gestor / Propietario</label>
-          <input
-            placeholder="ej: Julie, Eduar…"
-            value={gestor}
-            onChange={(e) => setGestor(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && aplicar()}
-          />
+          <label>Gestor</label>
+          <select value={gestor} onChange={(e) => { setGestor(e.target.value); }}>
+            <option value="">Todos</option>
+            <option value="__null__">null</option>
+            <option value="Automático">Automático</option>
+            <option value="Agente">Agente</option>
+          </select>
         </div>
 
         <button className="btn" onClick={aplicar} disabled={cargando}>

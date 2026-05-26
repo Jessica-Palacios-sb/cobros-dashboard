@@ -64,7 +64,9 @@ async function rsCobroDetalle(
     params.push(propietario);
     extra.push(`COALESCE(propietario, '—') = $${params.length}`);
   }
-  if (gestor) {
+  if (gestor === "__null__") {
+    extra.push(`(gestor IS NULL OR gestor = '') AND (propietario IS NULL OR propietario = '')`);
+  } else if (gestor) {
     params.push(`%${gestor}%`);
     extra.push(`(COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length})`);
   }
@@ -122,7 +124,9 @@ async function rsAdelDetalle(
     params.push(propietario);
     extra.push(`COALESCE(a.propietario, '—') = $${params.length}`);
   }
-  if (gestor) {
+  if (gestor === "__null__") {
+    extra.push(`(a.propietario IS NULL OR a.propietario = '')`);
+  } else if (gestor) {
     params.push(`%${gestor}%`);
     extra.push(`COALESCE(a.propietario, '') ILIKE $${params.length}`);
   }
@@ -188,7 +192,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
   const facByCaso = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_CASO_del__c) facByCaso.set(String(fac.SBEEMO_RB_CASO_del__c), fac);
 
-  const gestorRe = gestor ? new RegExp(gestor, "i") : null;
+  const gestorRe = (gestor && gestor !== "__null__") ? new RegExp(gestor, "i") : null;
   const out: FilaDetalle[] = [];
   for (const c of casos) {
     const inv   = invByAccount.get(String(c.AccountId ?? ""));
@@ -203,6 +207,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
 
     if (hora !== undefined && horaReg !== hora) continue;
     if (propietario !== undefined && prop !== propietario) continue;
+    if (gestor === "__null__" && prop !== "") continue;
     if (gestorRe && !gestorRe.test(prop)) continue;
 
     out.push({
@@ -249,7 +254,7 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string, gestor?: st
   const facByAccount = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_ACCOUNT__c) facByAccount.set(String(fac.SBEEMO_RB_ACCOUNT__c), fac);
 
-  const gestorRe = gestor ? new RegExp(gestor, "i") : null;
+  const gestorRe = (gestor && gestor !== "__null__") ? new RegExp(gestor, "i") : null;
   const out: FilaDetalle[] = [];
   for (const ac of acuerdos) {
     const caso      = ac.SBEEMO_RB_CASO__r as FilaSF | undefined;
@@ -267,6 +272,7 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string, gestor?: st
 
     if (hora !== undefined && horaReg !== hora) continue;
     if (propietario !== undefined && prop !== propietario) continue;
+    if (gestor === "__null__" && prop !== "") continue;
     if (gestorRe && !gestorRe.test(prop)) continue;
 
     out.push({

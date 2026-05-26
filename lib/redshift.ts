@@ -11,9 +11,9 @@ const pool = new Pool({
   password: process.env.REDSHIFT_PASSWORD,
   ssl:      { rejectUnauthorized: false },
   max: 3,
-  idleTimeoutMillis:       30_000,
-  connectionTimeoutMillis: 30_000,
-  query_timeout:           60_000,
+  idleTimeoutMillis:       60_000,
+  connectionTimeoutMillis: 60_000,
+  query_timeout:          240_000,
 });
 
 export type Fila = Record<string, unknown>;

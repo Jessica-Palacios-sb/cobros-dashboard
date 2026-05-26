@@ -10,7 +10,7 @@ import { COLUMNAS, columnasDescargables, FiltrosCobros, CasoCobro } from "@/type
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // exportar muchos miles puede tardar
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const session = await auth();

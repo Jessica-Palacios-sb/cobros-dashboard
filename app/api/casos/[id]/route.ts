@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getCasoDetalle } from "@/lib/datos";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function GET(
   _req: NextRequest,

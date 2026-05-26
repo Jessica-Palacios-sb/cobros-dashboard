@@ -13,6 +13,13 @@ export function corteHoy(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
 }
 
+/** Fecha de hace N días en la zona del negocio, formato YYYY-MM-DD. */
+export function fechaHaceNDias(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
+}
+
 /** Offset de la zona del negocio, ej: "-05:00" (para usar en SOQL). */
 export function offsetNegocio(): string {
   // Bogotá no tiene horario de verano, así que es fijo -05:00.

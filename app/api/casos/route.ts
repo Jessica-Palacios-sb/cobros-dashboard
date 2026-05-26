@@ -5,6 +5,7 @@ import { getCasos } from "@/lib/datos";
 import { FiltrosCobros } from "@/types/cobros";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   const session = await auth();

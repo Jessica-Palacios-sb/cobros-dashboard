@@ -1,8 +1,6 @@
 // lib/salesforce.ts
-// -----------------------------------------------------------------------------
-// Cliente de Salesforce. Usa client_credentials (server-to-server, sin password).
-// Cachea la conexión para no re-autenticar en cada invocación.
-// -----------------------------------------------------------------------------
+// Conexión a Salesforce con usuario/contraseña/token de seguridad.
+// Mismo flujo que jsforce en Python (Salesforce(username, password, security_token)).
 import jsforce, { Connection } from "jsforce";
 
 let cachedConn: Connection | null = null;
@@ -11,16 +9,17 @@ let tokenExpiry = 0;
 async function getConnection(): Promise<Connection> {
   if (cachedConn && Date.now() < tokenExpiry) return cachedConn;
 
+  const { SF_USERNAME, SF_PASSWORD, SF_SECURITY_TOKEN, SF_LOGIN_URL } = process.env;
+  if (!SF_USERNAME || !SF_PASSWORD || !SF_SECURITY_TOKEN) {
+    throw new Error("Faltan variables de Salesforce: SF_USERNAME, SF_PASSWORD o SF_SECURITY_TOKEN");
+  }
+
   const conn = new jsforce.Connection({
-    oauth2: {
-      loginUrl: process.env.SF_LOGIN_URL || "https://login.salesforce.com",
-      clientId: process.env.SF_CLIENT_ID,
-      clientSecret: process.env.SF_CLIENT_SECRET,
-    },
+    loginUrl: SF_LOGIN_URL || "https://login.salesforce.com",
   });
 
-  // Flujo client_credentials (configurar la Connected App en Salesforce)
-  await conn.authorize({ grant_type: "client_credentials" } as any);
+  // jsforce espera la contraseña concatenada con el security token
+  await conn.login(SF_USERNAME, SF_PASSWORD + SF_SECURITY_TOKEN);
 
   cachedConn = conn;
   tokenExpiry = Date.now() + 1000 * 60 * 25; // re-auth cada ~25 min
@@ -34,7 +33,6 @@ export async function querySalesforce(soql: string): Promise<FilaSF[]> {
   const result = await conn.query(soql);
   let registros = result.records as FilaSF[];
 
-  // Paginación de Salesforce (por si hoy hubiera muchos registros)
   let r = result;
   while (!r.done && r.nextRecordsUrl) {
     r = await conn.queryMore(r.nextRecordsUrl);

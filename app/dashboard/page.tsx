@@ -6,6 +6,7 @@ import Link from "next/link";
 import PanelDescarga from "@/components/PanelDescarga";
 import DateRangePicker from "@/components/DateRangePicker";
 import { CasoCobro, FiltrosCobros } from "@/types/cobros";
+import TablaAdelantos from "@/components/TablaAdelantos";
 
 const PAGE_SIZE = 50;
 
@@ -34,6 +35,7 @@ const fmtFecha = (iso: string) =>
 export default function Dashboard() {
   const { data: session } = useSession();
   const esAdmin = session?.user?.rol === "admin";
+  const [pestana, setPestana] = useState<"cobros" | "adelantos">("cobros");
 
   const todayInit = hoyBogota();
   const [fechaDesde, setFechaDesde] = useState(todayInit);
@@ -193,6 +195,26 @@ export default function Dashboard() {
       </header>
 
       <main className="content">
+        {/* Pestañas */}
+        <div className="tabs">
+          <button
+            className={`tab${pestana === "cobros" ? " tab-activo" : ""}`}
+            onClick={() => setPestana("cobros")}
+          >
+            Cobros
+          </button>
+          <button
+            className={`tab${pestana === "adelantos" ? " tab-activo" : ""}`}
+            onClick={() => setPestana("adelantos")}
+          >
+            Adelantos / Upsell
+          </button>
+        </div>
+
+        {pestana === "adelantos" ? (
+          <TablaAdelantos />
+        ) : (
+        <>
         {/* Filtros */}
         <div className="filtros">
           <div className="campo">
@@ -380,6 +402,8 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        </>
+        )}
       </main>
 
       {mostrarDescarga && (

@@ -94,3 +94,39 @@ export interface FiltrosCobros {
   subtipo?: string[];
   busqueda?: string;      // correo, ID de caso o número de caso
 }
+
+// ─── Adelantos / Upsell ───────────────────────────────────────────────────────
+
+export interface AcuerdoAdelanto {
+  // Acuerdo
+  acuerdoId:         string;   // id_adelanto_upsell  /  SF: Id de SBEEMO_RB_ACUERDO_PAGO__c
+  numeroAcuerdo:     string;   // numero_adelanto_upsell
+  tipo:              string;   // 'Adelanto' | 'Upsell'
+  estado:            string;   // 'Exitoso'
+  fechaAdelanto:     string;   // fecha_adelanto_upsell
+  numeroPago:        string;   // numero_pago
+  numAdelantadas:    number;   // num_adelantadas
+  // Caso
+  numeroCaso:        string;
+  fechaCierre:       string;   // fecha_ultima_modificacion
+  // Estudiante
+  correoElectronico: string;
+  pais:              string;
+  // Propietario
+  propietario:       string;
+  // Invoice / Factura
+  invoiceId:         string;   // id_invoice_factura
+  invoiceNumber:     string;   // invoice_fact_number
+  fechaPago:         string;
+  totalAmountUsd:    number;
+  paymentAmountUsd:  number;
+  origen:            "redshift" | "salesforce";
+}
+
+export interface FiltrosAdelanto {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  tipo?: string[];       // 'Adelanto' | 'Upsell'
+  propietario?: string[];
+  busqueda?: string;     // correo o número de caso
+}

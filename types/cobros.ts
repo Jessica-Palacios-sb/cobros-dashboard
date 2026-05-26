@@ -153,6 +153,7 @@ export interface FilaDetalle {
   id: string;
   numero: string;
   tipo: "Cobro" | "Adelanto" | "Upsell";
+  subTipo: string;
   hora: number;
   propietario: string;
   fechaPago: string;

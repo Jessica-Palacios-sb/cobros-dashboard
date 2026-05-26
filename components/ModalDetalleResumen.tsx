@@ -12,6 +12,14 @@ function formatHora(h: number): string {
   return `${display}:00 ${suffix}`;
 }
 
+function formatFecha(s: string): string {
+  if (!s) return "—";
+  // YYYY-MM-DD → DD/MM/YYYY
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return s;
+}
+
 interface Props {
   titulo: string;
   fechaDesde: string;
@@ -97,11 +105,12 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
                 <thead>
                   <tr>
                     <th>Tipo</th>
+                    <th>Sub tipo</th>
                     <th>Número</th>
                     <th>Propietario</th>
                     <th>Hora</th>
                     <th>Fecha Pago</th>
-                    <th style={{ textAlign: "right" }}>Monto USD</th>
+                    <th style={{ textAlign: "right" }}>Payment Amount</th>
                     <th>Origen</th>
                   </tr>
                 </thead>
@@ -113,6 +122,7 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
                           {f.tipo}
                         </span>
                       </td>
+                      <td>{f.subTipo || "—"}</td>
                       <td className="mono">
                         {f.id ? (
                           <a href={`${SF_BASE}${f.id}`} target="_blank" rel="noopener noreferrer" className="sf-link">
@@ -124,7 +134,7 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
                       </td>
                       <td>{f.propietario || "—"}</td>
                       <td className="mono">{formatHora(f.hora)}</td>
-                      <td className="mono">{f.fechaPago || "—"}</td>
+                      <td className="mono">{formatFecha(f.fechaPago)}</td>
                       <td className="monto">{f.monto > 0 ? fmtUSD.format(f.monto) : "—"}</td>
                       <td>
                         <span className={`chip ${f.origen === "salesforce" ? "chip-hoy" : "chip-hist"}`}>

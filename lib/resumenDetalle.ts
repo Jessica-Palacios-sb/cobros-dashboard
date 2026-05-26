@@ -14,6 +14,14 @@ function horaBO(iso: string): number {
   return ((new Date(iso).getUTCHours() - 5) + 24) % 24;
 }
 
+// pg devuelve Date objects para columnas date — convierte a YYYY-MM-DD
+function toDateStr(v: unknown): string {
+  if (!v) return "";
+  if (v instanceof Date) return v.toISOString().substring(0, 10);
+  const s = String(v);
+  return s.substring(0, 10);
+}
+
 // CTE adelantos con campos necesarios para el detalle
 const CTE_ADL_DETAIL = `
 WITH adelanto AS (
@@ -63,6 +71,7 @@ async function rsCobroDetalle(
        caseid                                                                                AS id
       ,COALESCE(numero_caso, caseid)                                                        AS numero
       ,'Cobro'                                                                              AS tipo
+      ,COALESCE(sub_tipo_caso, '')                                                          AS sub_tipo
       ,EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int  AS hora
       ,COALESCE(propietario, '—')                                                           AS propietario
       ,CAST(fecha_pago AS date)                                                             AS fecha_pago
@@ -83,9 +92,10 @@ async function rsCobroDetalle(
     id:          String(r.id          ?? ""),
     numero:      String(r.numero      ?? ""),
     tipo:        "Cobro" as const,
+    subTipo:     String(r.sub_tipo    ?? ""),
     hora:        Number(r.hora        ?? 0),
     propietario: String(r.propietario ?? ""),
-    fechaPago:   String(r.fecha_pago  ?? ""),
+    fechaPago:   toDateStr(r.fecha_pago),
     monto:       Number(r.monto       ?? 0),
     origen:      "redshift" as const,
   }));
@@ -136,9 +146,10 @@ async function rsAdelDetalle(
     id:          String(r.id          ?? ""),
     numero:      String(r.numero      ?? ""),
     tipo:        String(r.tipo        ?? "Adelanto") as "Adelanto" | "Upsell",
+    subTipo:     String(r.tipo        ?? ""),
     hora:        Number(r.hora        ?? 0),
     propietario: String(r.propietario ?? ""),
-    fechaPago:   String(r.fecha_pago  ?? ""),
+    fechaPago:   toDateStr(r.fecha_pago),
     monto:       Number(r.monto       ?? 0),
     origen:      "redshift" as const,
   }));
@@ -148,7 +159,7 @@ async function rsAdelDetalle(
 
 async function sfCobroDetalleHoy(hora?: number, propietario?: string): Promise<FilaDetalle[]> {
   const [casos, invoices, facturas] = await Promise.all([
-    querySalesforce(`SELECT Id, CaseNumber, ClosedDate, AccountId, Owner.Name
+    querySalesforce(`SELECT Id, CaseNumber, ClosedDate, AccountId, Owner.Name, RecordType.Name
       FROM Case
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
@@ -188,6 +199,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string): Promise<F
       id:          String(c.Id ?? ""),
       numero:      String(c.CaseNumber ?? ""),
       tipo:        "Cobro",
+      subTipo:     String((c.RecordType as FilaSF | undefined)?.Name ?? ""),
       hora:        horaReg,
       propietario: prop,
       fechaPago:   String(inv?.SBEEMO_FE_FECHA_PAGO__c ?? fac?.SBEEMO_FE_FECHA_PAGO__c ?? ""),
@@ -249,6 +261,7 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string): Promise<Fi
       id:          String(ac.Id ?? ""),
       numero:      String(ac.Name ?? ""),
       tipo:        String(ac.SBEEMO_LS_TIPO__c ?? "Adelanto") as "Adelanto" | "Upsell",
+      subTipo:     String(ac.SBEEMO_LS_TIPO__c ?? ""),
       hora:        horaReg,
       propietario: prop,
       fechaPago:   String(inv?.SBEEMO_FE_FECHA_PAGO__c ?? fac?.SBEEMO_FE_FECHA_PAGO__c ?? ""),

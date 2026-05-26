@@ -113,6 +113,11 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
     INNER JOIN adelanto AS a
       ON i.student_id = a.student_id
      AND CAST(a.fecha_acuerdo AS date) = CAST(i.fecha_pago AS date)
+     AND (
+       (i.invoice_factura = 'factura' AND i.adelanto = true)
+       OR
+       (i.invoice_factura = 'invoice' AND i.numero_invoice_factura IN (1, 21))
+     )
     WHERE i.estado                    = 'Pagada'
       AND CAST(i.fecha_pago AS date) >= $1
       AND CAST(i.fecha_pago AS date) <= $2
@@ -186,13 +191,15 @@ async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
         SBEEMO_FM_PAYMENT_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR Zuora__DueDate__c = TODAY)
-        AND SBEEMO_FM_ESTADO__c = 'Pagada'`
+        AND SBEEMO_FM_ESTADO__c = 'Pagada'
+        AND SBEEMO_NU_NUMERO_INVOICE__c IN (1, 21)`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_RB_ACCOUNT__c
       FROM SBEEMO_FAC_FACTURAS__c
       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR SBEEMO_FE_FECHA_VENCIMIENTO__c = TODAY)
-        AND SBEEMO_LS_STATUS__c = 'Pagada'`
+        AND SBEEMO_LS_STATUS__c = 'Pagada'
+        AND SBEEMO_CA_FACTURA_ADELANTADA__c = true`
     ).catch(() => [] as FilaSF[]),
   ]);
 

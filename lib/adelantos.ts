@@ -1,8 +1,9 @@
 // lib/adelantos.ts
 // Datos de Acuerdos de Pago tipo Adelanto / Upsell.
 // - Redshift: histórico de ayer hacia atrás
-// - Salesforce: TODO — pendiente de query SOQL
+// - Salesforce: acuerdos de HOY (3 queries en paralelo, joins en JS)
 import { runQuery, type Fila } from "@/lib/redshift";
+import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { corteHoy, fechaHaceNDias } from "@/lib/fecha";
 import { AcuerdoAdelanto, FiltrosAdelanto } from "@/types/cobros";
 
@@ -135,6 +136,132 @@ function mapRow(r: Fila): AcuerdoAdelanto {
   };
 }
 
+// ─── Salesforce: acuerdos de HOY ─────────────────────────────────────────────
+// Optimización: 3 queries en paralelo (eliminamos la query de User usando Owner.Name
+// por traversal y la de Case por SBEEMO_RB_CASO__r.*).
+
+const SEL_ACUERDOS_SF = [
+  "Id", "Name", "SBEEMO_LS_TIPO__c", "SBEEMO_FE_ACUERDO_PAGO__c",
+  "SBEEMO_LS_ESTADO__c", "sbeemo_nu_facturas_a_adelantar__c",
+  "sbeemo_tx_numero_pago__c", "sbeemo_fm_monto_dolares__c",
+  "OwnerId", "Owner.Name",
+  "SBEEMO_RB_CASO__c",
+  "SBEEMO_RB_CASO__r.CaseNumber",
+  "SBEEMO_RB_CASO__r.LastModifiedDate",
+  "SBEEMO_RB_CASO__r.SuppliedEmail",
+  "SBEEMO_RB_CASO__r.sb_pais_del_contacto__c",
+  "SBEEMO_RB_CASO__r.AccountId",
+].join(", ");
+
+const SEL_INVOICES_SF = [
+  "Id", "SBEEMO_FE_FECHA_PAGO__c", "Tipo_de_Oportunidad__c",
+  "SBEEMO_FM_PAYMENT_AMOUNT_USD__c", "SBEEMO_DV_AMOUNT_USD__c",
+  "SBEEMO_FM_BALANCE_USD__c", "SBEEMO_FM_ESTADO__c", "Zuora__Account__c",
+].join(", ");
+
+const SEL_FACTURAS_SF = [
+  "Id", "SBEEMO_FE_FECHA_PAGO__c",
+  "SBEEMO_NU_MontoPagadoFacturaDolares__c", "SBEEMO_DV_MONTO_FACTURA_DOLARES__c",
+  "SBEEMO_NU_MontoPendientePagoFactDolares__c", "SBEEMO_LS_STATUS__c",
+  "SBEEMO_RB_ACCOUNT__c",
+].join(", ");
+
+function escSF(v: string) {
+  return v.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function queryAdelantosHoy(filtros: FiltrosAdelanto): Promise<AcuerdoAdelanto[]> {
+  const corte = corteHoy();
+  // Si el rango pedido no incluye hoy, SF no aporta datos
+  if (filtros.fechaHasta && filtros.fechaHasta < corte) return [];
+  if (filtros.fechaDesde && filtros.fechaDesde > corte) return [];
+
+  // Filtro de tipo en SF
+  let tipoWhere = "SBEEMO_LS_TIPO__c IN ('Upsell','Adelanto')";
+  if (filtros.tipo?.length) {
+    tipoWhere = `SBEEMO_LS_TIPO__c IN (${filtros.tipo.map((t) => `'${escSF(t)}'`).join(",")})`;
+  }
+
+  // Filtro de búsqueda en SF (por correo o número de caso)
+  let busquedaWhere = "";
+  if (filtros.busqueda) {
+    const b = escSF(filtros.busqueda);
+    busquedaWhere = ` AND (SBEEMO_RB_CASO__r.CaseNumber = '${b}' OR SBEEMO_RB_CASO__r.SuppliedEmail = '${b}')`;
+  }
+
+  const [acuerdos, invoices, facturas] = await Promise.all([
+    querySalesforce(
+      `SELECT ${SEL_ACUERDOS_SF} FROM SBEEMO_ADP_ACUERDO_PAGO__c
+       WHERE SBEEMO_LS_ESTADO__c = 'Exitoso'
+         AND ${tipoWhere}
+         AND SBEEMO_FE_ACUERDO_PAGO__c = TODAY${busquedaWhere}`
+    ),
+    querySalesforce(
+      `SELECT ${SEL_INVOICES_SF} FROM Zuora__ZInvoice__c
+       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR Zuora__DueDate__c = TODAY)
+         AND SBEEMO_FM_ESTADO__c = 'Pagada'`
+    ).catch(() => [] as FilaSF[]),
+    querySalesforce(
+      `SELECT ${SEL_FACTURAS_SF} FROM SBEEMO_FAC_FACTURAS__c
+       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR SBEEMO_FE_FECHA_VENCIMIENTO__c = TODAY)
+         AND SBEEMO_LS_STATUS__c = 'Pagada'`
+    ).catch(() => [] as FilaSF[]),
+  ]);
+
+  // Índices por AccountId para join en JS (O(1) lookup)
+  const invByAccount = new Map<string, FilaSF>();
+  for (const inv of invoices) {
+    if (inv.Zuora__Account__c) invByAccount.set(String(inv.Zuora__Account__c), inv);
+  }
+  const facByAccount = new Map<string, FilaSF>();
+  for (const fac of facturas) {
+    if (fac.SBEEMO_RB_ACCOUNT__c) facByAccount.set(String(fac.SBEEMO_RB_ACCOUNT__c), fac);
+  }
+
+  return acuerdos.map((ac): AcuerdoAdelanto => {
+    const caso      = ac.SBEEMO_RB_CASO__r as FilaSF | undefined;
+    const accountId = String(caso?.AccountId ?? "");
+    const inv       = invByAccount.get(accountId);
+    const fac       = facByAccount.get(accountId);
+
+    // Invoice tiene prioridad sobre factura para datos financieros
+    const invoiceId        = inv ? String(inv.Id ?? "") : String(fac?.Id ?? "");
+    const fechaPago        = inv?.SBEEMO_FE_FECHA_PAGO__c
+      ? new Date(inv.SBEEMO_FE_FECHA_PAGO__c).toISOString()
+      : fac?.SBEEMO_FE_FECHA_PAGO__c
+        ? new Date(fac.SBEEMO_FE_FECHA_PAGO__c).toISOString() : "";
+    const paymentAmountUsd = inv
+      ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
+      : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
+    const totalAmountUsd   = inv
+      ? Number(inv.SBEEMO_DV_AMOUNT_USD__c ?? 0)
+      : Number(fac?.SBEEMO_DV_MONTO_FACTURA_DOLARES__c ?? 0);
+
+    return {
+      acuerdoId:         String(ac.Id ?? ""),
+      numeroAcuerdo:     String(ac.Name ?? ""),
+      tipo:              String(ac.SBEEMO_LS_TIPO__c ?? ""),
+      estado:            String(ac.SBEEMO_LS_ESTADO__c ?? ""),
+      fechaAdelanto:     ac.SBEEMO_FE_ACUERDO_PAGO__c
+        ? new Date(ac.SBEEMO_FE_ACUERDO_PAGO__c).toISOString() : "",
+      numeroPago:        String(ac.sbeemo_tx_numero_pago__c ?? ""),
+      numAdelantadas:    Number(ac.sbeemo_nu_facturas_a_adelantar__c ?? 0),
+      numeroCaso:        String(caso?.CaseNumber ?? ""),
+      fechaCierre:       caso?.LastModifiedDate
+        ? new Date(caso.LastModifiedDate).toISOString() : "",
+      correoElectronico: String(caso?.SuppliedEmail ?? ""),
+      pais:              String(caso?.sb_pais_del_contacto__c ?? ""),
+      propietario:       String((ac.Owner as FilaSF | undefined)?.Name ?? ""),
+      invoiceId,
+      invoiceNumber:     invoiceId,
+      fechaPago,
+      totalAmountUsd,
+      paymentAmountUsd,
+      origen:            "salesforce",
+    };
+  });
+}
+
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export interface ResultadoAdelantos {
@@ -143,6 +270,7 @@ export interface ResultadoAdelantos {
   pageSize: number;
   total: number;
   actualizadoEn: string;
+  sfError?: string;
 }
 
 export async function getAdelantos(
@@ -152,8 +280,18 @@ export async function getAdelantos(
 ): Promise<ResultadoAdelantos> {
   const offset = (page - 1) * pageSize;
   const { sql, params } = buildWhere(filtros);
+  const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
 
-  const [rows, countRows] = await Promise.all([
+  let sfError: string | undefined;
+  const sfP = page === 1 && sfActivo
+    ? queryAdelantosHoy(filtros).catch((e: any) => {
+        sfError = String(e?.message ?? e);
+        return [] as AcuerdoAdelanto[];
+      })
+    : Promise.resolve<AcuerdoAdelanto[]>([]);
+
+  const [sf, rows, countRows] = await Promise.all([
+    sfP,
     runQuery(
       `${CTE}
        SELECT ${SEL}
@@ -173,23 +311,28 @@ export async function getAdelantos(
   ]);
 
   return {
-    data: rows.map(mapRow),
+    data: [...sf, ...rows.map(mapRow)],
     page,
     pageSize,
     total: Number(countRows[0]?.total ?? 0),
+    sfError,
     actualizadoEn: new Date().toISOString(),
   };
 }
 
 export async function getAdelantosParaExport(filtros: FiltrosAdelanto): Promise<AcuerdoAdelanto[]> {
   const { sql, params } = buildWhere(filtros);
-  const rows = await runQuery(
-    `${CTE}
-     SELECT ${SEL}
-     ${FROM_JOIN}
-     WHERE ${sql}
-     ORDER BY i.fecha_pago DESC`,
-    params
-  );
-  return rows.map(mapRow);
+  const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
+  const [sf, rows] = await Promise.all([
+    sfActivo ? queryAdelantosHoy(filtros).catch(() => [] as AcuerdoAdelanto[]) : Promise.resolve<AcuerdoAdelanto[]>([]),
+    runQuery(
+      `${CTE}
+       SELECT ${SEL}
+       ${FROM_JOIN}
+       WHERE ${sql}
+       ORDER BY i.fecha_pago DESC`,
+      params
+    ),
+  ]);
+  return [...sf, ...rows.map(mapRow)];
 }

@@ -134,6 +134,13 @@ function escSOQL(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
+// Sub tipo caso en SF no existe como campo — se mapea desde RecordTypeId
+const RT_POR_SUBTIPO: Record<string, string> = {
+  "Cobranzas":          "0127V000000p7WyQAI",
+  "Cobranzas 2.0":      "012UH0000018MqnYAE",
+  "Adelanto de cuotas": "012UH000009AltJYAS",
+};
+
 export function whereSOQL(f: FiltrosCobros): string {
   const corte = corteHoy();
 
@@ -141,16 +148,22 @@ export function whereSOQL(f: FiltrosCobros): string {
   if (f.fechaHasta && f.fechaHasta < corte) return "Id = null";
   if (f.fechaDesde && f.fechaDesde > corte) return "Id = null";
 
+  // Si hay filtro de subtipo, resolver los RecordTypeIds correspondientes
+  let rtIds: string[];
+  if (f.subtipo?.length) {
+    rtIds = f.subtipo.map((s) => RT_POR_SUBTIPO[s]).filter(Boolean);
+    if (!rtIds.length) return "Id = null"; // subtipo no reconocido
+  } else {
+    rtIds = ["012UH000009AltJYAS", "0127V000000p7WyQAI", "012UH0000018MqnYAE"];
+  }
+
   const cond: string[] = [
-    `RecordTypeId IN ('012UH000009AltJYAS','0127V000000p7WyQAI','012UH0000018MqnYAE')`,
+    `RecordTypeId IN (${rtIds.map((id) => `'${id}'`).join(",")})`,
     `DAY_ONLY(convertTimezone(CreatedDate)) = TODAY`,
   ];
 
   if (f.gestor?.length) {
     cond.push(`SBEEMO_LS_GESTOR__c IN (${f.gestor.map((g) => `'${escSOQL(g)}'`).join(",")})`);
-  }
-  if (f.subtipo?.length) {
-    cond.push(`Sub_Tipo_Caso__c IN (${f.subtipo.map((s) => `'${escSOQL(s)}'`).join(",")})`);
   }
   if (f.busqueda) {
     const b = escSOQL(f.busqueda);

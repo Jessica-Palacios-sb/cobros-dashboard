@@ -148,3 +148,19 @@ export interface ResultadoResumen {
   actualizadoEn: string;
   sfError?: string;
 }
+
+export interface FilaDetalle {
+  id: string;
+  numero: string;
+  tipo: "Cobro" | "Adelanto" | "Upsell";
+  hora: number;
+  propietario: string;
+  fechaPago: string;
+  monto: number;
+  origen: "redshift" | "salesforce";
+}
+
+export interface ResultadoDetalle {
+  filas: FilaDetalle[];
+  sfError?: string;
+}

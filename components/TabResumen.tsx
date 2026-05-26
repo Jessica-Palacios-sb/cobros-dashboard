@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import type { FilaResumen, ResultadoResumen } from "@/types/cobros";
+import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 
 function hoyBogota() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
@@ -37,10 +38,11 @@ interface TablaResumenProps {
   filas: FilaResumen[];
   label: string;
   formatKey: (k: string) => string;
+  onDetalle: (key: string) => void;
 }
 
-function TablaResumen({ filas, label, formatKey }: TablaResumenProps) {
-  const total = filas.reduce((s, f) => s + f.cant, 0);
+function TablaResumen({ filas, label, formatKey, onDetalle }: TablaResumenProps) {
+  const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
 
   return (
@@ -61,7 +63,15 @@ function TablaResumen({ filas, label, formatKey }: TablaResumenProps) {
             {filas.map((f) => (
               <tr key={f.key}>
                 <td>{formatKey(f.key)}</td>
-                <td style={{ textAlign: "right" }}>{fmtNum(f.cant)}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button
+                    className="cant-detalle"
+                    onClick={() => onDetalle(f.key)}
+                    title="Ver detalle"
+                  >
+                    {fmtNum(f.cant)}
+                  </button>
+                </td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
                 <td style={{ textAlign: "right" }}>{fmtPct(f.pct)}</td>
@@ -93,6 +103,12 @@ function formatHora(k: string): string {
   return `${display}:00 ${suffix}`;
 }
 
+interface ModalState {
+  titulo: string;
+  hora?: number;
+  propietario?: string;
+}
+
 export default function TabResumen() {
   const [periodo, setPeriodo] = useState<Periodo>("hoy");
   const [fechaDesde, setFechaDesde] = useState(hoyBogota());
@@ -100,8 +116,11 @@ export default function TabResumen() {
   const [datos, setDatos] = useState<ResultadoResumen | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+  const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string }>({ fd: hoyBogota(), fh: hoyBogota() });
+  const [modal, setModal] = useState<ModalState | null>(null);
 
   const cargar = useCallback(async (fd: string, fh: string) => {
+    setRangoActivo({ fd, fh });
     setCargando(true);
     setError("");
     try {
@@ -232,13 +251,26 @@ export default function TabResumen() {
             filas={datos.porHora}
             label="Por hora"
             formatKey={formatHora}
+            onDetalle={(key) => setModal({ titulo: formatHora(key), hora: Number(key) })}
           />
           <TablaResumen
             filas={datos.porPropietario}
             label="Por propietario"
             formatKey={(k) => k || "—"}
+            onDetalle={(key) => setModal({ titulo: key || "—", propietario: key })}
           />
         </div>
+      )}
+
+      {modal && (
+        <ModalDetalleResumen
+          titulo={modal.titulo}
+          fechaDesde={rangoActivo.fd}
+          fechaHasta={rangoActivo.fh}
+          hora={modal.hora}
+          propietario={modal.propietario}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

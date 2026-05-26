@@ -169,7 +169,7 @@ export default function Dashboard() {
     totalCasos:      casos.length,
     totalPayment:    casos.reduce((s, c) => s + (c.paymentAmountUsd || 0), 0),
     totalBalance:    casos.reduce((s, c) => s + (c.balanceUsd || 0), 0),
-    finalizados:     casos.filter((c) => c.status.toLowerCase().includes("éxito")).length,
+    finalizados:     casos.filter((c) => c.status.toLowerCase().includes("con éxito")).length,
   }), [casos]);
 
   return (

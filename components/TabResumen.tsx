@@ -123,7 +123,7 @@ export default function TabResumen() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string; gestor?: string }>({ fd: hoyBogota(), fh: hoyBogota() });
-  const [modal, setModal] = useState<ModalState | null>(null);
+  const [cargandoSinc, setCargandoSinc] = useState(false);
 
   const cargar = useCallback(async (fd: string, fh: string, gest?: string) => {
     setRangoActivo({ fd, fh, gestor: gest });
@@ -163,6 +163,20 @@ export default function TabResumen() {
     if (p !== "custom") {
       const [fd, fh] = rango(p, fechaDesde, fechaHasta);
       cargar(fd, fh, gestor || undefined);
+    }
+  };
+
+  const sincronizarRedshift = async () => {
+    setCargandoSinc(true);
+    try {
+      const res = await fetch("/api/cron/manual-refresh", { method: "POST" });
+      if (!res.ok) throw new Error("Error al sincronizar");
+      alert("Sincronización de Redshift completada con éxito.");
+      aplicar();
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setCargandoSinc(false);
     }
   };
 
@@ -230,6 +244,15 @@ export default function TabResumen() {
           disabled={cargando}
         >
           {cargando ? <><span className="spinner" /> Actualizando…</> : "↻ Actualizar"}
+        </button>
+
+        <button
+          className="btn btn-ghost"
+          onClick={sincronizarRedshift}
+          disabled={cargandoSinc || cargando}
+          title="Forzar actualización de datos históricos desde Redshift"
+        >
+          {cargandoSinc ? <><span className="spinner" /> Sincronizando…</> : "☁ Sincronizar Datos"}
         </button>
       </div>
 

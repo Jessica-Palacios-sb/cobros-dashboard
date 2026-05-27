@@ -52,10 +52,10 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
   const maxPct = Math.max(...filas.map(f => f.pct), 0);
 
   const getPctColor = (pct: number) => {
-    if (pct === 0) return "transparent";
-    if (pct >= maxPct * 0.7) return "#dcfce7"; // Verde claro (Alto)
-    if (pct >= maxPct * 0.3) return "#fef9c3"; // Amarillo claro (Medio)
-    return "#fee2e2"; // Rojo claro (Bajo)
+    if (pct === 0) return "inherit";
+    if (pct >= maxPct * 0.7) return "#16a34a"; // Verde fuerte (Alto)
+    if (pct >= maxPct * 0.3) return "#ca8a04"; // Dorado/Amarillo (Medio)
+    return "#dc2626"; // Rojo fuerte (Bajo)
   };
 
   return (
@@ -89,7 +89,11 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
                 </td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
-                <td style={{ textAlign: "right", backgroundColor: getPctColor(f.pct) }}>
+                <td style={{
+                  textAlign: "right",
+                  color: getPctColor(f.pct),
+                  fontWeight: "bold"
+                }}>
                   {fmtPct(f.pct)}
                 </td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.totalAmount)}</td>

@@ -137,6 +137,8 @@ export interface FilaResumen {
   key: string;
   cant: number;
   cashTotal: number;
+  totalAmount: number;
+  discountPct: number;
   ticket: number;
   pct: number;
 }

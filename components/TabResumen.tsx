@@ -46,6 +46,17 @@ interface TablaResumenProps {
 function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: TablaResumenProps) {
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
+  const totalAmt   = filas.reduce((s, f) => s + f.totalAmount, 0);
+
+  // Para el semáforo de % Cobros
+  const maxPct = Math.max(...filas.map(f => f.pct), 0);
+
+  const getPctColor = (pct: number) => {
+    if (pct === 0) return "transparent";
+    if (pct >= maxPct * 0.7) return "#dcfce7"; // Verde claro (Alto)
+    if (pct >= maxPct * 0.3) return "#fef9c3"; // Amarillo claro (Medio)
+    return "#fee2e2"; // Rojo claro (Bajo)
+  };
 
   return (
     <div className="tabla-resumen-wrap">
@@ -59,6 +70,8 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
               <th style={{ textAlign: "right" }}>Cash Total</th>
               <th style={{ textAlign: "right" }}>Ticket</th>
               <th style={{ textAlign: "right" }}>% Cobros</th>
+              <th style={{ textAlign: "right" }}>Monto Factura</th>
+              <th style={{ textAlign: "right" }}>% Descuento</th>
             </tr>
           </thead>
           <tbody>
@@ -76,7 +89,11 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
                 </td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
-                <td style={{ textAlign: "right" }}>{fmtPct(f.pct)}</td>
+                <td style={{ textAlign: "right", backgroundColor: getPctColor(f.pct) }}>
+                  {fmtPct(f.pct)}
+                </td>
+                <td style={{ textAlign: "right" }}>{fmtUSD.format(f.totalAmount)}</td>
+                <td style={{ textAlign: "right" }}>{fmtPct(f.discountPct)}</td>
               </tr>
             ))}
           </tbody>
@@ -93,6 +110,10 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
                 <strong>{total > 0 ? fmtUSD.format(totalCash / total) : "—"}</strong>
               </td>
               <td style={{ textAlign: "right" }}><strong>100%</strong></td>
+              <td style={{ textAlign: "right" }}><strong>{fmtUSD.format(totalAmt)}</strong></td>
+              <td style={{ textAlign: "right" }}>
+                <strong>{totalAmt > 0 ? fmtPct((totalAmt - totalCash) / totalAmt) : "—"}</strong>
+              </td>
             </tr>
           </tfoot>
         </table>

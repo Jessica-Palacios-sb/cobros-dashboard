@@ -36,7 +36,13 @@ WITH adelanto AS (
 
 type Param = string | number | boolean | null;
 
-interface AggRaw { hora: number; propietario: string; cant: number; cashTotal: number; }
+interface AggRaw {
+  hora: number;
+  propietario: string;
+  cant: number;
+  cashTotal: number;
+  totalAmount: number;
+}
 
 function horaBO(iso: string): number {
   if (!iso) return -1;
@@ -47,9 +53,10 @@ function horaBO(iso: string): number {
 function merge(dest: Map<string, AggRaw>, rows: AggRaw[]) {
   for (const r of rows) {
     const k = `${r.hora}||${r.propietario}`;
-    const e = dest.get(k) ?? { hora: r.hora, propietario: r.propietario, cant: 0, cashTotal: 0 };
+    const e = dest.get(k) ?? { hora: r.hora, propietario: r.propietario, cant: 0, cashTotal: 0, totalAmount: 0 };
     e.cant      += r.cant;
     e.cashTotal += r.cashTotal;
+    e.totalAmount += r.totalAmount;
     dest.set(k, e);
   }
 }
@@ -73,6 +80,7 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
       ,COALESCE(propietario, '—')                                                          AS propietario
       ,COUNT(*)                                                                             AS cant
       ,COALESCE(SUM(payment_amount_usd), 0)                                                AS cash_total
+      ,COALESCE(SUM(total_amount_usd), 0)                                                  AS total_amount
     FROM cobros_base
     WHERE fecha_pago::date          >= $1
       AND fecha_pago::date          <= $2
@@ -89,6 +97,7 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
     propietario: String(r.propietario ?? ""),
     cant:        Number(r.cant       ?? 0),
     cashTotal:   Number(r.cash_total ?? 0),
+    totalAmount: Number(r.total_amount ?? 0),
   }));
 }
 
@@ -110,6 +119,7 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
       ,COALESCE(a.propietario, '—')                                                             AS propietario
       ,COUNT(*)                                                                                  AS cant
       ,COALESCE(SUM(i.payment_amount_usd), 0)                                                   AS cash_total
+      ,COALESCE(SUM(i.total_amount_usd), 0)                                                     AS total_amount
     FROM salesforce.tabla_core_invoices_facturas AS i
     INNER JOIN adelanto AS a
       ON i.student_id = a.student_id
@@ -132,6 +142,7 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
     propietario: String(r.propietario ?? ""),
     cant:        Number(r.cant       ?? 0),
     cashTotal:   Number(r.cash_total ?? 0),
+    totalAmount: Number(r.total_amount ?? 0),
   }));
 }
 
@@ -169,12 +180,15 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
     const pago = inv
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
+    const total = inv
+      ? Number(inv.SBEEMO_DV_AMOUNT_USD__c ?? 0)
+      : Number(fac?.SBEEMO_DV_MONTO_FACTURA_DOLARES__c ?? 0);
     if (pago <= 0 || !c.ClosedDate) continue;
     const prop = String((c.Owner as FilaSF | undefined)?.Name ?? "");
     const isAdelantoCuotas = String(c.RecordTypeId ?? "") === "012UH000009AltJYAS";
     if (gestor === "__null__" && prop !== "") continue;
     if (re && !re.test(prop) && !(gestor === "Agente" && isAdelantoCuotas)) continue;
-    out.push({ hora: horaBO(String(c.ClosedDate)), propietario: prop, cant: 1, cashTotal: pago });
+    out.push({ hora: horaBO(String(c.ClosedDate)), propietario: prop, cant: 1, cashTotal: pago, totalAmount: total });
   }
   return out;
 }
@@ -221,12 +235,15 @@ async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
     const pago = inv
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
+    const total = inv
+      ? Number(inv.SBEEMO_DV_AMOUNT_USD__c ?? 0)
+      : Number(fac?.SBEEMO_DV_MONTO_FACTURA_DOLARES__c ?? 0);
     const lastMod = String(caso?.LastModifiedDate ?? "");
     if (pago <= 0 || !lastMod) continue;
     const prop = String((ac.Owner as FilaSF | undefined)?.Name ?? "");
     if (gestor === "__null__" && prop !== "") continue;
     if (re && !re.test(prop)) continue;
-    out.push({ hora: horaBO(lastMod), propietario: prop, cant: 1, cashTotal: pago });
+    out.push({ hora: horaBO(lastMod), propietario: prop, cant: 1, cashTotal: pago, totalAmount: total });
   }
   return out;
 }
@@ -238,21 +255,27 @@ function toResumen(
   keyFn: (r: AggRaw) => string,
   totalCant: number
 ): FilaResumen[] {
-  const grupos = new Map<string, { cant: number; cashTotal: number }>();
+  const grupos = new Map<string, { cant: number; cashTotal: number; totalAmount: number }>();
   for (const r of raw.values()) {
     const k = keyFn(r);
-    const e = grupos.get(k) ?? { cant: 0, cashTotal: 0 };
+    const e = grupos.get(k) ?? { cant: 0, cashTotal: 0, totalAmount: 0 };
     e.cant      += r.cant;
     e.cashTotal += r.cashTotal;
+    e.totalAmount += r.totalAmount;
     grupos.set(k, e);
   }
-  return Array.from(grupos.entries()).map(([key, v]) => ({
-    key,
-    cant:      v.cant,
-    cashTotal: v.cashTotal,
-    ticket:    v.cant > 0 ? v.cashTotal / v.cant : 0,
-    pct:       totalCant > 0 ? (v.cant / totalCant) * 100 : 0,
-  }));
+  return Array.from(grupos.entries()).map(([key, v]) => {
+    const discount = v.totalAmount > 0 ? ((v.totalAmount - v.cashTotal) / v.totalAmount) * 100 : 0;
+    return {
+      key,
+      cant:      v.cant,
+      cashTotal: v.cashTotal,
+      totalAmount: v.totalAmount,
+      discountPct: discount,
+      ticket:    v.cant > 0 ? v.cashTotal / v.cant : 0,
+      pct:       totalCant > 0 ? (v.cant / totalCant) * 100 : 0,
+    };
+  });
 }
 
 export async function getResumen(

@@ -123,7 +123,9 @@ export default function TabResumen() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string; gestor?: string }>({ fd: hoyBogota(), fh: hoyBogota() });
+  const [modal, setModal] = useState<ModalState | null>(null);
   const [cargandoSinc, setCargandoSinc] = useState(false);
+
 
   const cargar = useCallback(async (fd: string, fh: string, gest?: string) => {
     setRangoActivo({ fd, fh, gestor: gest });

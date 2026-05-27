@@ -6,6 +6,8 @@ import { runQuery, type Fila } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { whereRedshift, whereSOQL, TABLE, BASE_CTE } from "@/lib/filtros";
 import { COLUMNAS, FiltrosCobros, CasoCobro } from "@/types/cobros";
+import { getRedshiftCache } from "@/lib/cache";
+import { corteHoy, fechaHaceNDias } from "@/lib/fecha";
 
 // ─── Constantes Salesforce ────────────────────────────────────────────────────
 
@@ -63,7 +65,7 @@ const SEL_REDSHIFT = COLUMNAS.filter((c) => c.key !== "origen")
 
 // ─── Mappers ──────────────────────────────────────────────────────────────────
 
-function mapRedshift(r: Fila): CasoCobro {
+export function mapRedshift(r: Fila): CasoCobro {
   return {
     casoId:               String(r.caseid ?? ""),
     numeroCaso:           String(r.numero_caso ?? ""),
@@ -188,6 +190,42 @@ async function querySalesforceCasos(filtros: FiltrosCobros): Promise<CasoCobro[]
 
 // ─── API pública ──────────────────────────────────────────────────────────────
 
+/**
+ * Filtra la data de Redshift en memoria replicando la lógica de whereRedshift.
+ */
+function filterRedshiftData(data: CasoCobro[], filtros: FiltrosCobros): CasoCobro[] {
+  const hoy = corteHoy();
+
+  // Fecha desde efectiva: si hay búsqueda pero no fecha desde, acotar a 30 días
+  const fdEfectiva = filtros.fechaDesde
+    ?? (filtros.busqueda && !filtros.fechaHasta ? fechaHaceNDias(30) : undefined);
+
+  return data.filter((c) => {
+    // 1. Solo datos anteriores a hoy (ya filtrados por el cron, pero por seguridad)
+    if (c.fechaApertura >= hoy) return false;
+
+    // 2. Rango de fechas
+    if (fdEfectiva && c.fechaApertura < fdEfectiva) return false;
+    if (filtros.fechaHasta && c.fechaApertura > filtros.fechaHasta) return false;
+
+    // 3. Gestores
+    if (filtros.gestor?.length && !filtros.gestor.includes(c.gestor)) return false;
+
+    // 4. Subtipos
+    if (filtros.subtipo?.length && !filtros.subtipo.includes(c.subTipoCaso)) return false;
+
+    // 5. Búsqueda (Case Insensitive)
+    if (filtros.busqueda) {
+      const b = filtros.busqueda.toLowerCase();
+      const match = c.correoElectronico.toLowerCase().includes(b) ||
+                    c.numeroCaso.toLowerCase().includes(b);
+      if (!match) return false;
+    }
+
+    return true;
+  });
+}
+
 export interface ResultadoCasos {
   data: CasoCobro[];
   page: number;
@@ -202,11 +240,10 @@ export async function getCasos(
   page: number,
   pageSize: number
 ): Promise<ResultadoCasos> {
-  const offset = (page - 1) * pageSize;
-  const w = whereRedshift(filtros);
-
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
   let sfError: string | undefined;
+
+  // Salesforce: siempre en tiempo real en la pág 1
   const sfP = page === 1 && sfActivo
     ? querySalesforceCasos(filtros).catch((e: any) => {
         sfError = String(e?.message ?? e);
@@ -214,50 +251,69 @@ export async function getCasos(
       })
     : Promise.resolve<CasoCobro[]>([]);
 
-  const histP = runQuery(
-    `${BASE_CTE}
-     SELECT ${SEL_REDSHIFT} FROM ${TABLE}
-     WHERE ${w.sql}
-     ORDER BY fecha_hora_apertura_real DESC
-     LIMIT ${pageSize} OFFSET ${offset}`,
-    w.params
-  );
+  // Redshift: Leer de la caché y filtrar en memoria
+  const cacheP = getRedshiftCache();
 
-  const countP = runQuery(
-    `${BASE_CTE}
-     SELECT COUNT(*) AS total FROM ${TABLE} WHERE ${w.sql}`,
-    w.params
-  );
+  const [sf, cachedData] = await Promise.all([sfP, cacheP]);
 
-  const [sf, hist, count] = await Promise.all([sfP, histP, countP]);
+  // Si no hay caché, caemos al método lento (runQuery) para no dejar la app vacía
+  let hist: CasoCobro[] = [];
+  if (!cachedData) {
+    const w = whereRedshift(filtros);
+    const raw = await runQuery(
+      `${BASE_CTE} SELECT ${COLUMNAS.filter(c => c.key !== "origen").map(c => c.redshift).join(", ")} FROM ${TABLE}
+       WHERE ${w.sql} ORDER BY fecha_hora_apertura_real DESC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
+      w.params
+    );
+    hist = raw.map(mapRedshift);
+  } else {
+    // Filtrar todo el snapshot en memoria y paginar
+    const filtered = filterRedshiftData(cachedData, filtros);
+    hist = filtered.slice((page - 1) * pageSize, page * pageSize);
+  }
+
+  // Para el total histórico, si hay caché usamos el length del filtro, si no, query de count
+  let totalHistorico = 0;
+  if (cachedData) {
+    totalHistorico = filterRedshiftData(cachedData, filtros).length;
+  } else {
+    const w = whereRedshift(filtros);
+    const countRes = await runQuery(`${BASE_CTE} SELECT COUNT(*) AS total FROM ${TABLE} WHERE ${w.sql}`, w.params);
+    totalHistorico = Number(countRes[0]?.total ?? 0);
+  }
 
   return {
-    data: [...sf, ...hist.map(mapRedshift)],
+    data: [...sf, ...hist],
     page,
     pageSize,
-    totalHistorico: Number(count[0]?.total ?? 0),
+    totalHistorico,
     sfError,
     actualizadoEn: new Date().toISOString(),
   };
 }
 
 export async function getCasosParaExport(filtros: FiltrosCobros): Promise<CasoCobro[]> {
-  const w = whereRedshift(filtros);
-
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
-  const [sf, hist] = await Promise.all([
-    sfActivo
-      ? querySalesforceCasos(filtros).catch(() => [] as CasoCobro[])
-      : Promise.resolve<CasoCobro[]>([]),
-    runQuery(
-      `${BASE_CTE}
-       SELECT ${SEL_REDSHIFT} FROM ${TABLE} WHERE ${w.sql}
-       ORDER BY fecha_hora_apertura_real DESC`,
-      w.params
-    ),
-  ]);
+  const cachedData = await getRedshiftCache();
 
-  return [...sf, ...hist.map(mapRedshift)];
+  const sfP = sfActivo
+    ? querySalesforceCasos(filtros).catch(() => [] as CasoCobro[])
+    : Promise.resolve<CasoCobro[]>([]);
+
+  let hist: CasoCobro[] = [];
+  if (!cachedData) {
+    const w = whereRedshift(filtros);
+    const raw = await runQuery(
+      `${BASE_CTE} SELECT ${COLUMNAS.filter(c => c.key !== "origen").map(c => c.redshift).join(", ")} FROM ${TABLE} WHERE ${w.sql} ORDER BY fecha_hora_apertura_real DESC`,
+      w.params
+    );
+    hist = raw.map(mapRedshift);
+  } else {
+    hist = filterRedshiftData(cachedData, filtros);
+  }
+
+  const [sf] = await Promise.all([sfP]);
+  return [...sf, ...hist];
 }
 
 export async function getCasoDetalle(id: string): Promise<CasoCobro | null> {
@@ -279,9 +335,16 @@ export async function getCasoDetalle(id: string): Promise<CasoCobro | null> {
     }
   }
 
+  const cachedData = await getRedshiftCache();
+  if (cachedData) {
+    const found = cachedData.find(c => c.casoId === id);
+    if (found) return found;
+  }
+
   const hist = await runQuery(
-    `${BASE_CTE} SELECT ${SEL_REDSHIFT} FROM ${TABLE} WHERE caseid = $1 LIMIT 1`,
+    `${BASE_CTE} SELECT ${COLUMNAS.filter(c => c.key !== "origen").map(c => c.redshift).join(", ")} FROM ${TABLE} WHERE caseid = $1 LIMIT 1`,
     [id]
   );
   return hist.length ? mapRedshift(hist[0]) : null;
 }
+

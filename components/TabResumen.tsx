@@ -215,7 +215,7 @@ export default function TabResumen() {
           <select value={gestor} onChange={(e) => { setGestor(e.target.value); }}>
             <option value="">Todos</option>
             <option value="__null__">null</option>
-            <option value="Automático">Automático</option>
+            <option value="Automatico">Automatico</option>
             <option value="Agente">Agente</option>
           </select>
         </div>

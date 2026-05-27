@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import type { FilaResumen, ResultadoResumen } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 
@@ -125,6 +126,7 @@ export default function TabResumen() {
   const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string; gestor?: string }>({ fd: hoyBogota(), fh: hoyBogota() });
   const [modal, setModal] = useState<ModalState | null>(null);
   const [cargandoSinc, setCargandoSinc] = useState(false);
+  const { data: session } = useSession();
 
 
   const cargar = useCallback(async (fd: string, fh: string, gest?: string) => {
@@ -248,14 +250,16 @@ export default function TabResumen() {
           {cargando ? <><span className="spinner" /> Actualizando…</> : "↻ Actualizar"}
         </button>
 
-        <button
-          className="btn btn-ghost"
-          onClick={sincronizarRedshift}
-          disabled={cargandoSinc || cargando}
-          title="Forzar actualización de datos históricos desde Redshift"
-        >
-          {cargandoSinc ? <><span className="spinner" /> Sincronizando…</> : "☁ Sincronizar Datos"}
-        </button>
+        {session?.user?.rol === "admin" && (
+          <button
+            className="btn btn-ghost"
+            onClick={sincronizarRedshift}
+            disabled={cargandoSinc || cargando}
+            title="Forzar actualización de datos históricos desde Redshift"
+          >
+            {cargandoSinc ? <><span className="spinner" /> Sincronizando…</> : "☁ Sincronizar Datos"}
+          </button>
+        )}
       </div>
 
       {error && <div className="estado-error">⚠ {error}</div>}

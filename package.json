@@ -13,6 +13,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/pg": "^8.20.0",
+    "@vercel/kv": "^3.0.0",
     "bcryptjs": "^3.0.3",
     "jsforce": "^3.6.0",
     "next": "^15.1.0",

@@ -160,6 +160,7 @@ export interface FilaDetalle {
   propietario: string;
   fechaPago: string;
   monto: number;
+  montoFactura: number;
   origen: "redshift" | "salesforce";
 }
 

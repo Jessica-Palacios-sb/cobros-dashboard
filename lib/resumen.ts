@@ -155,12 +155,12 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, Zuora__Account__c
+        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
       WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY AND SBEEMO_FM_ESTADO__c = 'Pagada'`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_RB_CASO_del__c
+        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_CASO_del__c
       FROM SBEEMO_FAC_FACTURAS__c
       WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY AND SBEEMO_LS_STATUS__c = 'Pagada'`
     ).catch(() => [] as FilaSF[]),
@@ -204,14 +204,14 @@ async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
         AND SBEEMO_LS_TIPO__c IN ('Upsell','Adelanto')
         AND SBEEMO_FE_ACUERDO_PAGO__c = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, Zuora__Account__c
+        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR Zuora__DueDate__c = TODAY)
         AND SBEEMO_FM_ESTADO__c = 'Pagada'
         AND SBEEMO_NU_NUMERO_INVOICE__c IN (1, 21)`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_RB_ACCOUNT__c
+        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_ACCOUNT__c
       FROM SBEEMO_FAC_FACTURAS__c
       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR SBEEMO_FE_FECHA_VENCIMIENTO__c = TODAY)
         AND SBEEMO_LS_STATUS__c = 'Pagada'

@@ -83,6 +83,7 @@ async function rsCobroDetalle(
       ,COALESCE(propietario, '—')                                                           AS propietario
       ,CAST(fecha_pago AS date)                                                             AS fecha_pago
       ,COALESCE(payment_amount_usd, 0)                                                     AS monto
+      ,COALESCE(total_amount_usd, 0)                                                       AS monto_factura
     FROM cobros_base
     WHERE fecha_pago::date          >= $1
       AND fecha_pago::date          <= $2
@@ -104,6 +105,7 @@ async function rsCobroDetalle(
     propietario: String(r.propietario ?? ""),
     fechaPago:   toDateStr(r.fecha_pago),
     monto:       Number(r.monto       ?? 0),
+    montoFactura: Number(r.monto_factura ?? 0),
     origen:      "redshift" as const,
   }));
 }
@@ -142,6 +144,7 @@ async function rsAdelDetalle(
       ,COALESCE(a.propietario, '—')                                                                 AS propietario
       ,CAST(i.fecha_pago AS date)                                                                    AS fecha_pago
       ,COALESCE(i.payment_amount_usd, 0)                                                            AS monto
+      ,COALESCE(i.total_amount_usd, 0)                                                              AS monto_factura
     FROM salesforce.tabla_core_invoices_facturas AS i
     INNER JOIN adelanto AS a
       ON i.student_id = a.student_id
@@ -169,6 +172,7 @@ async function rsAdelDetalle(
     propietario: String(r.propietario ?? ""),
     fechaPago:   toDateStr(r.fecha_pago),
     monto:       Number(r.monto       ?? 0),
+    montoFactura: Number(r.monto_factura ?? 0),
     origen:      "redshift" as const,
   }));
 }
@@ -182,12 +186,12 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, Zuora__Account__c
+        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
       WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY AND SBEEMO_FM_ESTADO__c = 'Pagada'`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_RB_CASO_del__c
+        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_CASO_del__c
       FROM SBEEMO_FAC_FACTURAS__c
       WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY AND SBEEMO_LS_STATUS__c = 'Pagada'`
     ).catch(() => [] as FilaSF[]),
@@ -206,6 +210,9 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
     const monto = inv
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
+    const total = inv
+      ? Number(inv.SBEEMO_DV_AMOUNT_USD__c ?? 0)
+      : Number(fac?.SBEEMO_DV_MONTO_FACTURA_DOLARES__c ?? 0);
     if (monto <= 0 || !c.ClosedDate) continue;
 
     const horaReg = horaBO(String(c.ClosedDate));
@@ -227,6 +234,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
       propietario: prop,
       fechaPago:   String(inv?.SBEEMO_FE_FECHA_PAGO__c ?? fac?.SBEEMO_FE_FECHA_PAGO__c ?? ""),
       monto,
+      montoFactura: total,
       origen:      "salesforce",
     });
   }
@@ -244,14 +252,14 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string, gestor?: st
         AND SBEEMO_LS_TIPO__c IN ('Upsell','Adelanto')
         AND SBEEMO_FE_ACUERDO_PAGO__c = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, Zuora__Account__c
+        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR Zuora__DueDate__c = TODAY)
         AND SBEEMO_FM_ESTADO__c = 'Pagada'
         AND SBEEMO_NU_NUMERO_INVOICE__c IN (1, 21)`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_RB_ACCOUNT__c
+        SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_ACCOUNT__c
       FROM SBEEMO_FAC_FACTURAS__c
       WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR SBEEMO_FE_FECHA_VENCIMIENTO__c = TODAY)
         AND SBEEMO_LS_STATUS__c = 'Pagada'
@@ -274,6 +282,9 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string, gestor?: st
     const monto = inv
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_NU_MontoPagadoFacturaDolares__c ?? 0);
+    const total = inv
+      ? Number(inv.SBEEMO_DV_AMOUNT_USD__c ?? 0)
+      : Number(fac?.SBEEMO_DV_MONTO_FACTURA_DOLARES__c ?? 0);
     const lastMod = String(caso?.LastModifiedDate ?? "");
     if (monto <= 0 || !lastMod) continue;
 
@@ -294,6 +305,7 @@ async function sfAdelDetalleHoy(hora?: number, propietario?: string, gestor?: st
       propietario: prop,
       fechaPago:   String(inv?.SBEEMO_FE_FECHA_PAGO__c ?? fac?.SBEEMO_FE_FECHA_PAGO__c ?? ""),
       monto,
+      montoFactura: total,
       origen:      "salesforce",
     });
   }

@@ -79,7 +79,7 @@ async function rsCobroDetalle(
       ,COALESCE(numero_caso, caseid)                                                        AS numero
       ,'Cobro'                                                                              AS tipo
       ,COALESCE(sub_tipo_caso, '')                                                          AS sub_tipo
-      ,EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int  AS hora
+      ,EXTRACT(HOUR FROM fecha_hora_cierre_real)::int  AS hora
       ,COALESCE(propietario, '—')                                                           AS propietario
       ,CAST(fecha_pago AS date)                                                             AS fecha_pago
       ,COALESCE(payment_amount_usd, 0)                                                     AS monto
@@ -140,7 +140,7 @@ async function rsAdelDetalle(
        a.acuerdo_id                                                                                  AS id
       ,COALESCE(a.acuerdo_nombre, a.acuerdo_id)                                                     AS numero
       ,a.tipo                                                                                         AS tipo
-      ,EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', a.fecha_ultima_modificacion))::int      AS hora
+      ,EXTRACT(HOUR FROM a.fecha_ultima_modificacion)::int      AS hora
       ,COALESCE(a.propietario, '—')                                                                 AS propietario
       ,CAST(i.fecha_pago AS date)                                                                    AS fecha_pago
       ,COALESCE(i.payment_amount_usd, 0)                                                            AS monto

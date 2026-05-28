@@ -76,7 +76,7 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
   const rows = await runQuery(`
     ${BASE_CTE}
     SELECT
-       EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int AS hora
+       EXTRACT(HOUR FROM fecha_hora_cierre_real)::int AS hora
       ,COALESCE(propietario, '—')                                                          AS propietario
       ,COUNT(*)                                                                             AS cant
       ,COALESCE(SUM(payment_amount_usd), 0)                                                AS cash_total
@@ -115,7 +115,7 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
   const rows = await runQuery(`
     ${CTE_ADL}
     SELECT
-       EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', a.fecha_ultima_modificacion))::int AS hora
+       EXTRACT(HOUR FROM a.fecha_ultima_modificacion)::int AS hora
       ,COALESCE(a.propietario, '—')                                                             AS propietario
       ,COUNT(*)                                                                                  AS cant
       ,COALESCE(SUM(i.payment_amount_usd), 0)                                                   AS cash_total

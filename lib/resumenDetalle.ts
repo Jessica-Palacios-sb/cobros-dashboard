@@ -54,23 +54,25 @@ async function rsCobroDetalle(
   hora?: number, propietario?: string, gestor?: string
 ): Promise<FilaDetalle[]> {
   const params: Param[] = [fd, fh, corte];
-  const extra: string[] = [];
+  const cond: string[] = [];
 
   if (hora !== undefined) {
     params.push(hora);
-    extra.push(`EXTRACT(HOUR FROM CONVERT_TIMEZONE('America/Bogota', fecha_hora_cierre_real))::int = $${params.length}`);
+    cond.push(`EXTRACT(HOUR FROM fecha_hora_cierre_real)::int = $${params.length}`);
   }
   if (propietario !== undefined) {
     params.push(propietario);
-    extra.push(`COALESCE(propietario, '—') = $${params.length}`);
+    cond.push(`COALESCE(propietario, '—') = $${params.length}`);
   }
   if (gestor === "__null__") {
-    extra.push(`(gestor IS NULL OR gestor = '') AND (propietario IS NULL OR propietario = '')`);
+    cond.push(`(gestor IS NULL OR gestor = '') AND (propietario IS NULL OR propietario = '')`);
   } else if (gestor) {
     params.push(`%${gestor}%`);
     const adelantoCond = gestor === "Agente" ? ` OR sub_tipo_caso = 'Adelanto de cuotas'` : "";
-    extra.push(`(COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length}${adelantoCond})`);
+    cond.push(`(COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length}${adelantoCond})`);
   }
+
+  const whereClause = cond.length > 0 ? "AND " + cond.join(" AND ") : "";
 
   const rows = await runQuery(`
     ${BASE_CTE}
@@ -91,7 +93,7 @@ async function rsCobroDetalle(
       AND payment_amount_usd        >  0
       AND fecha_hora_cierre_real    IS NOT NULL
       AND fecha_hora_apertura_real  <  $3
-      ${extra.length ? "AND " + extra.join(" AND ") : ""}
+      ${whereClause}
     ORDER BY fecha_pago DESC, hora
     LIMIT 500
   `, params);
@@ -184,7 +186,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
     querySalesforce(`SELECT Id, CaseNumber, ClosedDate, AccountId, Owner.Name, RecordType.Name
       FROM Case
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
-        AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
+        AND DAY_ONLY(convertTimezone(ClosedDate, 'America/Bogota')) = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c

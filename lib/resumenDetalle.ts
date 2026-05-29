@@ -210,7 +210,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
       FROM Zuora__ZInvoice__c
       WHERE SBEEMO_FE_FECHA_PAGO__c = ${bogota.date}
         AND SBEEMO_FM_ESTADO__c = 'Pagada'
-        AND SBEEMO_NU_NUMERO_INVOICE__c NOT IN ('1', '21')`
+        AND SBEEMO_NU_NUMERO_INVOICE__c NOT IN (1, 21)`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_CASO_del__c

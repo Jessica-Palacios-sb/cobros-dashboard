@@ -100,6 +100,7 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
     FROM cobros_base
     WHERE fecha_pago::date          >= $1
       AND fecha_pago::date          <= $2
+      AND fecha_pago::date          <  $3
       AND fecha_pago                IS NOT NULL
       AND payment_amount_usd        >  0
       AND fecha_hora_cierre_real    IS NOT NULL

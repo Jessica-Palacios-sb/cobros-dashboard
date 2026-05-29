@@ -353,6 +353,30 @@ select {
   background: var(--accent-soft);
 }
 
+/* ===== Vista Mes: filas expandibles ===== */
+.fila-dia {
+  background: var(--bg-card);
+}
+.fila-dia:hover {
+  background: var(--accent-soft);
+}
+.expand-icon {
+  display: inline-block;
+  width: 16px;
+  font-size: 9px;
+  opacity: 0.6;
+  margin-right: 4px;
+}
+.fila-hora-mes td {
+  background: rgba(255, 255, 255, 0.03);
+  border-top: none;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+.hora-indent {
+  padding-left: 32px !important;
+}
+
 /* ===== Modal de detalle ===== */
 .modal-overlay {
   position: fixed;

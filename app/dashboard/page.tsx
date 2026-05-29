@@ -8,6 +8,7 @@ import DateRangePicker from "@/components/DateRangePicker";
 import { CasoCobro, FiltrosCobros } from "@/types/cobros";
 import TablaAdelantos from "@/components/TablaAdelantos";
 import TabResumen from "@/components/TabResumen";
+import TabMes from "@/components/TabMes";
 
 const PAGE_SIZE = 50;
 
@@ -36,7 +37,7 @@ const fmtFecha = (iso: string) =>
 export default function Dashboard() {
   const { data: session } = useSession();
   const esAdmin = session?.user?.rol === "admin";
-  const [pestana, setPestana] = useState<"resumen" | "cobros" | "adelantos">("resumen");
+  const [pestana, setPestana] = useState<"resumen" | "mes" | "cobros" | "adelantos">("resumen");
 
   const todayInit = hoyBogota();
   const [fechaDesde, setFechaDesde] = useState(todayInit);
@@ -205,6 +206,12 @@ export default function Dashboard() {
             Resumen
           </button>
           <button
+            className={`tab${pestana === "mes" ? " tab-activo" : ""}`}
+            onClick={() => setPestana("mes")}
+          >
+            Vista Mes
+          </button>
+          <button
             className={`tab${pestana === "cobros" ? " tab-activo" : ""}`}
             onClick={() => setPestana("cobros")}
           >
@@ -220,6 +227,8 @@ export default function Dashboard() {
 
         {pestana === "resumen" ? (
           <TabResumen />
+        ) : pestana === "mes" ? (
+          <TabMes />
         ) : pestana === "adelantos" ? (
           <TablaAdelantos />
         ) : (

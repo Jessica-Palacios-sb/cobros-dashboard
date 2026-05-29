@@ -168,3 +168,30 @@ export interface ResultadoDetalle {
   filas: FilaDetalle[];
   sfError?: string;
 }
+
+// ─── Vista Mes ────────────────────────────────────────────────────────────────
+
+export interface FilaHoraMes {
+  hora: number;
+  cant: number;
+  cashTotal: number;
+  totalAmount: number;
+  ticket: number;
+}
+
+export interface FilaDia {
+  fecha: string;
+  cant: number;
+  cashTotal: number;
+  totalAmount: number;
+  ticket: number;
+  pct: number;
+  horas: FilaHoraMes[];
+}
+
+export interface ResultadoMes {
+  porDia: FilaDia[];
+  porPropietario: FilaResumen[];
+  totales: { cant: number; cashTotal: number; totalAmount: number; ticket: number };
+  sfError?: string;
+}

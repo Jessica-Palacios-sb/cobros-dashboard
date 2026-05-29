@@ -34,6 +34,25 @@ WITH adelanto AS (
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
+function getBogotaToday() {
+  const now = new Date();
+  const bogotaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(now);
+
+  // Rango UTC para el día de hoy en Bogotá (UTC-5)
+  // Inicio: Hoy 00:00 Bogotá -> Hoy 05:00 UTC
+  // Fin: Hoy 23:59 Bogotá -> Mañana 04:59 UTC
+  const start = new Date(`${bogotaDate}T05:00:00Z`);
+  const end = new Date(`${bogotaDate}T23:59:59Z`);
+  // Para el fin, sumamos 24h a las 05:00 UTC para llegar a las 04:59 del día siguiente
+  const endCorrected = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000);
+
+  return {
+    date: bogotaDate,
+    startUtc: start.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
+    endUtc: endCorrected.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
+  };
+}
+
 type Param = string | number | boolean | null;
 
 interface AggRaw {
@@ -149,22 +168,24 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
 // ─── Salesforce: cobros de hoy agregados ──────────────────────────────────────
 
 async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
+  const bogota = getBogotaToday();
   const [casos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId
       FROM Case
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
-        AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
+        AND ClosedDate >= ${bogota.startUtc}
+        AND ClosedDate <= ${bogota.endUtc}`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
-      WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY
+      WHERE SBEEMO_FE_FECHA_PAGO__c = ${bogota.date}
         AND SBEEMO_FM_ESTADO__c = 'Pagada'
         AND SBEEMO_NU_NUMERO_INVOICE__c NOT IN ('1', '21')`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_CASO_del__c
       FROM SBEEMO_FAC_FACTURAS__c
-      WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY
+      WHERE SBEEMO_FE_FECHA_PAGO__c = ${bogota.date}
         AND SBEEMO_LS_STATUS__c = 'Pagada'
         AND SBEEMO_CA_FACTURA_ADELANTADA__c = false`
     ).catch(() => [] as FilaSF[]),
@@ -200,24 +221,25 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
 // ─── Salesforce: adelantos de hoy agregados ───────────────────────────────────
 
 async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
+  const bogota = getBogotaToday();
   const [acuerdos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, SBEEMO_FE_ACUERDO_PAGO__c,
         SBEEMO_RB_CASO__r.LastModifiedDate, SBEEMO_RB_CASO__r.AccountId, Owner.Name
       FROM SBEEMO_ADP_ACUERDO_PAGO__c
       WHERE SBEEMO_LS_ESTADO__c = 'Exitoso'
         AND SBEEMO_LS_TIPO__c IN ('Upsell','Adelanto')
-        AND SBEEMO_FE_ACUERDO_PAGO__c = TODAY`),
+        AND SBEEMO_FE_ACUERDO_PAGO__c = ${bogota.date}`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
-      WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR Zuora__DueDate__c = TODAY)
+      WHERE (SBEEMO_FE_FECHA_PAGO__c = ${bogota.date} OR Zuora__DueDate__c = ${bogota.date})
         AND SBEEMO_FM_ESTADO__c = 'Pagada'
         AND SBEEMO_NU_NUMERO_INVOICE__c IN (1, 21)`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_ACCOUNT__c
       FROM SBEEMO_FAC_FACTURAS__c
-      WHERE (SBEEMO_FE_FECHA_PAGO__c = TODAY OR SBEEMO_FE_FECHA_VENCIMIENTO__c = TODAY)
+      WHERE (SBEEMO_FE_FECHA_PAGO__c = ${bogota.date} OR SBEEMO_FE_FECHA_VENCIMIENTO__c = ${bogota.date})
         AND SBEEMO_LS_STATUS__c = 'Pagada'
         AND SBEEMO_CA_FACTURA_ADELANTADA__c = true`
     ).catch(() => [] as FilaSF[]),

@@ -40,16 +40,14 @@ function getBogotaToday() {
 
   // Rango UTC para el día de hoy en Bogotá (UTC-5)
   // Inicio: Hoy 00:00 Bogotá -> Hoy 05:00 UTC
-  // Fin: Hoy 23:59 Bogotá -> Mañana 04:59 UTC
+  // Fin: Mañana 05:00 UTC (excluyendo el segundo final)
   const start = new Date(`${bogotaDate}T05:00:00Z`);
-  const end = new Date(`${bogotaDate}T23:59:59Z`);
-  // Para el fin, sumamos 24h a las 05:00 UTC para llegar a las 04:59 del día siguiente
-  const endCorrected = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000);
 
   return {
     date: bogotaDate,
-    startUtc: start.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
-    endUtc: endCorrected.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
+    startUtc: start.toISOString(), // Formato YYYY-MM-DDTHH:mm:ss.sssZ
+    endUtc: end.toISOString(),     // Formato YYYY-MM-DDTHH:mm:ss.sssZ
   };
 }
 

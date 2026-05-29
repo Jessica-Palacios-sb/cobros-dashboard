@@ -152,17 +152,21 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
   const [casos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId
       FROM Case
-      WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
+      WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE')
         AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
       FROM Zuora__ZInvoice__c
-      WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY AND SBEEMO_FM_ESTADO__c = 'Pagada'`
+      WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY
+        AND SBEEMO_FM_ESTADO__c = 'Pagada'
+        AND SBEEMO_NU_NUMERO_INVOICE__c NOT IN ('1', '21')`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_CASO_del__c
       FROM SBEEMO_FAC_FACTURAS__c
-      WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY AND SBEEMO_LS_STATUS__c = 'Pagada'`
+      WHERE SBEEMO_FE_FECHA_PAGO__c = TODAY
+        AND SBEEMO_LS_STATUS__c = 'Pagada'
+        AND SBEEMO_CA_FACTURA_ADELANTADA__c = false`
     ).catch(() => [] as FilaSF[]),
   ]);
 

@@ -38,16 +38,15 @@ function getBogotaToday() {
   const now = new Date();
   const bogotaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(now);
 
-  // Rango UTC para el día de hoy en Bogotá (UTC-5)
-  // Inicio: Hoy 00:00 Bogotá -> Hoy 05:00 UTC
-  // Fin: Mañana 05:00 UTC (excluyendo el segundo final)
   const start = new Date(`${bogotaDate}T05:00:00Z`);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000);
 
+  const formatSOQL = (d: Date) => d.toISOString().split('.')[0] + 'Z';
+
   return {
     date: bogotaDate,
-    startUtc: start.toISOString(), // Formato YYYY-MM-DDTHH:mm:ss.sssZ
-    endUtc: end.toISOString(),     // Formato YYYY-MM-DDTHH:mm:ss.sssZ
+    startUtc: formatSOQL(start),
+    endUtc: formatSOQL(end),
   };
 }
 

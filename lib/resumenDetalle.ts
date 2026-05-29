@@ -184,12 +184,14 @@ function getBogotaToday() {
   const bogotaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(now);
 
   const start = new Date(`${bogotaDate}T05:00:00Z`);
-  const endCorrected = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1000);
+
+  const formatSOQL = (d: Date) => d.toISOString().split('.')[0] + 'Z';
 
   return {
     date: bogotaDate,
-    startUtc: start.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
-    endUtc: endCorrected.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z',
+    startUtc: formatSOQL(start),
+    endUtc: formatSOQL(end),
   };
 }
 

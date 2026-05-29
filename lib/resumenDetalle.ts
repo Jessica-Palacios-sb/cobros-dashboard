@@ -183,7 +183,7 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
   const [casos, invoices, facturas] = await Promise.all([
     querySalesforce(`SELECT Id, CaseNumber, ClosedDate, AccountId, Owner.Name, RecordType.Name
       FROM Case
-      WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE')
+      WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND DAY_ONLY(convertTimezone(ClosedDate)) = TODAY`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c

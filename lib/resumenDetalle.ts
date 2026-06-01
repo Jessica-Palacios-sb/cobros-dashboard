@@ -207,11 +207,12 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
         AND ClosedDate >= ${bogota.startUtc}
         AND ClosedDate <= ${bogota.endUtc}`),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
-        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c, Zuora__Account__c
+        SBEEMO_FM_PAYMENT_AMOUNT_USD__c, SBEEMO_DV_AMOUNT_USD__c,
+        Zuora__Account__c, SBEEMO_NU_NUMERO_INVOICE__c, Opportunity__r.SBEEMO_LS_TIPO_VENTA__c
       FROM Zuora__ZInvoice__c
       WHERE SBEEMO_FE_FECHA_PAGO__c = ${bogota.date}
         AND SBEEMO_FM_ESTADO__c = 'Pagada'
-        AND SBEEMO_NU_NUMERO_INVOICE__c NOT IN (1, 21)`
+        AND SBEEMO_NU_NUMERO_INVOICE__c != 1`
     ).catch(() => [] as FilaSF[]),
     querySalesforce(`SELECT Id, SBEEMO_FE_FECHA_PAGO__c,
         SBEEMO_NU_MontoPagadoFacturaDolares__c, SBEEMO_DV_MONTO_FACTURA_DOLARES__c, SBEEMO_RB_CASO_del__c
@@ -223,7 +224,12 @@ async function sfCobroDetalleHoy(hora?: number, propietario?: string, gestor?: s
   ]);
 
   const invByAccount = new Map<string, FilaSF>();
-  for (const inv of invoices) if (inv.Zuora__Account__c) invByAccount.set(String(inv.Zuora__Account__c), inv);
+  for (const inv of invoices) {
+    if (!inv.Zuora__Account__c) continue;
+    if (Number(inv.SBEEMO_NU_NUMERO_INVOICE__c ?? 0) === 21 &&
+        String((inv.Opportunity__r as FilaSF | undefined)?.SBEEMO_LS_TIPO_VENTA__c ?? "") === "Upgrade OPS") continue;
+    invByAccount.set(String(inv.Zuora__Account__c), inv);
+  }
   const facByCaso = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_CASO_del__c) facByCaso.set(String(fac.SBEEMO_RB_CASO_del__c), fac);
 

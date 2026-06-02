@@ -1,6 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useState } from "react";
 import type { FilaDia, FilaResumen, ResultadoMes } from "@/types/cobros";
+import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 
 const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const fmtNum = (n: number) => n.toLocaleString("es-CO");
@@ -10,6 +11,35 @@ function fmtSeg(s: number | undefined): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+}
+
+function buz40Color(n: number, max: number): string {
+  if (!n || !max) return "var(--text-muted)";
+  const r = n / max;
+  if (r >= 0.6) return "#dc2626";
+  if (r >= 0.3) return "#f59e0b";
+  return "#16a34a";
+}
+
+function hoyBogota() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
+}
+
+function mesFechas(mes: string): { desde: string; hasta: string } {
+  const desde = `${mes}-01`;
+  const [y, m] = mes.split("-").map(Number);
+  const lastDay = new Date(y, m, 0);
+  const last = `${lastDay.getFullYear()}-${String(lastDay.getMonth()+1).padStart(2,"0")}-${String(lastDay.getDate()).padStart(2,"0")}`;
+  const hoy = hoyBogota();
+  return { desde, hasta: last < hoy ? last : hoy };
+}
+
+interface ModalMesState {
+  titulo: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  hora?: number;
+  propietario?: string;
 }
 
 function getMesesDisponibles(): { value: string; label: string }[] {
@@ -44,7 +74,13 @@ function formatFechaDia(fecha: string): string {
 
 // ─── Tabla por día ─────────────────────────────────────────────────────────────
 
-function TablaDias({ filas }: { filas: FilaDia[] }) {
+interface TablaDiasProps {
+  filas: FilaDia[];
+  onDetalleDia: (fecha: string) => void;
+  onDetalleHora: (fecha: string, hora: number) => void;
+}
+
+function TablaDias({ filas, onDetalleDia, onDetalleHora }: TablaDiasProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (f: string) =>
     setExpanded(prev => {
@@ -55,6 +91,7 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
 
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
+  const maxBuz40  = Math.max(...filas.map(f => f.five9?.buzones40seg ?? 0), 1);
 
   return (
     <div className="tabla-resumen-wrap">
@@ -84,21 +121,35 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
                     <span className="expand-icon">{expanded.has(f.fecha) ? "▼" : "▶"}</span>
                     {formatFechaDia(f.fecha)}
                   </td>
-                  <td style={{ textAlign: "right" }}>{fmtNum(f.cant)}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <button className="cant-detalle" onClick={e => { e.stopPropagation(); onDetalleDia(f.fecha); }} title="Ver detalle">
+                      {fmtNum(f.cant)}
+                    </button>
+                  </td>
                   <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                   <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
                   <td style={{ textAlign: "right" }}>{fmtPct(f.pct)}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
-                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones40seg) : "—"}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">
+                    {f.five9
+                      ? <span style={{ color: buz40Color(f.five9.buzones40seg, maxBuz40) }}>
+                          ● {fmtNum(f.five9.buzones40seg)}
+                        </span>
+                      : "—"}
+                  </td>
                   <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.onCallSeg)}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.notReadySeg)}</td>
                 </tr>
                 {expanded.has(f.fecha) && f.horas.map(h => (
                   <tr key={`${f.fecha}-${h.hora}`} className="fila-hora-mes">
                     <td className="hora-indent">{formatHora(h.hora)}</td>
-                    <td style={{ textAlign: "right" }}>{fmtNum(h.cant)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      <button className="cant-detalle" onClick={() => onDetalleHora(f.fecha, h.hora)} title="Ver detalle">
+                        {fmtNum(h.cant)}
+                      </button>
+                    </td>
                     <td style={{ textAlign: "right" }}>{fmtUSD.format(h.cashTotal)}</td>
                     <td style={{ textAlign: "right" }}>{fmtUSD.format(h.ticket)}</td>
                     <td></td>
@@ -133,9 +184,15 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
 
 // ─── Tabla por propietario ────────────────────────────────────────────────────
 
-function TablaPropietario({ filas }: { filas: FilaResumen[] }) {
+interface TablaPropietarioProps {
+  filas: FilaResumen[];
+  onDetalle: (propietario: string) => void;
+}
+
+function TablaPropietario({ filas, onDetalle }: TablaPropietarioProps) {
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
+  const maxBuz40  = Math.max(...filas.map(f => f.five9?.buzones40seg ?? 0), 1);
 
   return (
     <div className="tabla-resumen-wrap">
@@ -161,14 +218,24 @@ function TablaPropietario({ filas }: { filas: FilaResumen[] }) {
             {filas.map(f => (
               <tr key={f.key}>
                 <td>{f.key || "—"}</td>
-                <td style={{ textAlign: "right" }}>{fmtNum(f.cant)}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button className="cant-detalle" onClick={() => onDetalle(f.key)} title="Ver detalle">
+                    {fmtNum(f.cant)}
+                  </button>
+                </td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
                 <td style={{ textAlign: "right" }}>{fmtPct(f.pct)}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
-                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones40seg) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">
+                  {f.five9
+                    ? <span style={{ color: buz40Color(f.five9.buzones40seg, maxBuz40) }}>
+                        ● {fmtNum(f.five9.buzones40seg)}
+                      </span>
+                    : "—"}
+                </td>
                 <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.onCallSeg)}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.notReadySeg)}</td>
               </tr>
@@ -202,6 +269,7 @@ export default function TabMes() {
   const [datos, setDatos]   = useState<ResultadoMes | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError]   = useState("");
+  const [modal, setModal]   = useState<ModalMesState | null>(null);
 
   const cargar = useCallback(async (m: string, gest?: string, st?: string) => {
     setCargando(true);
@@ -304,11 +372,40 @@ export default function TabMes() {
       )}
 
       {/* Tablas */}
-      {datos && datos.porDia.length > 0 && (
-        <div className="resumen-tablas">
-          <TablaDias filas={datos.porDia} />
-          <TablaPropietario filas={datos.porPropietario} />
-        </div>
+      {datos && datos.porDia.length > 0 && (() => {
+        const { desde, hasta } = mesFechas(mes);
+        return (
+          <div className="resumen-tablas">
+            <TablaDias
+              filas={datos.porDia}
+              onDetalleDia={fecha => {
+                setModal({ titulo: `Detalle — ${fecha}`, fechaDesde: fecha, fechaHasta: fecha });
+              }}
+              onDetalleHora={(fecha, hora) => {
+                const h = hora < 12 ? `${hora}am` : `${hora === 12 ? 12 : hora - 12}pm`;
+                setModal({ titulo: `${fecha} ${h}`, fechaDesde: fecha, fechaHasta: fecha, hora });
+              }}
+            />
+            <TablaPropietario
+              filas={datos.porPropietario}
+              onDetalle={propietario => {
+                setModal({ titulo: propietario || "—", fechaDesde: desde, fechaHasta: hasta, propietario });
+              }}
+            />
+          </div>
+        );
+      })()}
+
+      {modal && (
+        <ModalDetalleResumen
+          titulo={modal.titulo}
+          fechaDesde={modal.fechaDesde}
+          fechaHasta={modal.fechaHasta}
+          hora={modal.hora}
+          propietario={modal.propietario}
+          gestor={gestor || undefined}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

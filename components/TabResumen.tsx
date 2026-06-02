@@ -28,6 +28,14 @@ function fmtSeg(s: number | undefined): string {
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
 }
+
+function buz40Color(n: number, max: number): string {
+  if (!n || !max) return "var(--text-muted)";
+  const r = n / max;
+  if (r >= 0.6) return "#dc2626";
+  if (r >= 0.3) return "#f59e0b";
+  return "#16a34a";
+}
 const fmtFecha = (iso: string) =>
   iso ? new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—";
 
@@ -53,6 +61,7 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
   const totalAmt   = filas.reduce((s, f) => s + f.totalAmount, 0);
+  const maxBuz40  = Math.max(...filas.map(f => f.five9?.buzones40seg ?? 0), 1);
 
   // Para el semáforo de % Cobros
   const maxPct = Math.max(...filas.map(f => f.pct), 0);
@@ -113,7 +122,13 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
-                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones40seg) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">
+                  {f.five9
+                    ? <span style={{ color: buz40Color(f.five9.buzones40seg, maxBuz40) }}>
+                        ● {fmtNum(f.five9.buzones40seg)}
+                      </span>
+                    : "—"}
+                </td>
                 <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.onCallSeg)}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.notReadySeg)}</td>
               </tr>

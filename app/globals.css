@@ -301,14 +301,10 @@ select {
 
 /* ===== Tablas de resumen ===== */
 .resumen-tablas {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 24px;
   margin-top: 20px;
-}
-
-@media (max-width: 900px) {
-  .resumen-tablas { grid-template-columns: 1fr; }
 }
 
 .tabla-resumen-wrap {
@@ -495,6 +491,8 @@ th.col-f9 {
 }
 .tabla-scroll {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 480px;
 }
 table {
   width: 100%;

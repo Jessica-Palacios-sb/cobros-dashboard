@@ -92,17 +92,28 @@ export async function createUser(
   email: string,
   nombre: string,
   password: string,
-  rol: "admin" | "viewer"
+  rol: "admin" | "viewer",
+  mustChangePassword = false
 ): Promise<Usuario> {
   const sql = getDb();
   const hash = await bcrypt.hash(password, 12);
   const rows = await sql`
-    INSERT INTO usuarios (email, nombre, password_hash, rol, activo)
-    VALUES (${email.toLowerCase()}, ${nombre}, ${hash}, ${rol}, true)
-    RETURNING id, email, nombre, rol, activo
+    INSERT INTO usuarios (email, nombre, password_hash, rol, activo, must_change_password)
+    VALUES (${email.toLowerCase()}, ${nombre}, ${hash}, ${rol}, true, ${mustChangePassword})
+    RETURNING id, email, nombre, rol, activo, must_change_password
   `;
   const r = rows[0] as any;
-  return { ...r, id: String(r.id), creadoEn: "" } as Usuario;
+  return { ...r, id: String(r.id), mustChangePassword: r.must_change_password ?? false, creadoEn: "" } as Usuario;
+}
+
+export async function changePassword(id: string, newPassword: string): Promise<void> {
+  const sql = getDb();
+  const hash = await bcrypt.hash(newPassword, 12);
+  await sql`
+    UPDATE usuarios
+    SET password_hash = ${hash}, must_change_password = false
+    WHERE id = ${Number(id)}
+  `;
 }
 
 export async function setActivo(id: string, activo: boolean): Promise<void> {

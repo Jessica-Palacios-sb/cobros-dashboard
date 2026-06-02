@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 
 interface Usuario {
   id: string;
@@ -11,6 +12,8 @@ interface Usuario {
   activo: boolean;
   creadoEn: string;
 }
+
+interface FilaExcel { nombre: string; email: string; }
 
 const PASS_MIN = 8;
 
@@ -39,6 +42,13 @@ export default function AdminPage() {
   const [guardando,   setGuardando]   = useState(false);
   const [formError,   setFormError]   = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
+
+  // Carga masiva Excel
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [filasExcel,    setFilasExcel]    = useState<FilaExcel[]>([]);
+  const [mostrarBulk,   setMostrarBulk]   = useState(false);
+  const [bulkCargando,  setBulkCargando]  = useState(false);
+  const [bulkResultados, setBulkResultados] = useState<{ email: string; ok: boolean; error?: string }[]>([]);
 
   // Modal reset contraseña
   const [resetId,    setResetId]    = useState<string | null>(null);
@@ -129,6 +139,43 @@ export default function AdminPage() {
     }
   };
 
+  const handleExcelFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target!.result as ArrayBuffer);
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+      const parsed: FilaExcel[] = rows.map(r => {
+        const keys = Object.keys(r);
+        const nk = keys.find(k => /nombre/i.test(k)) ?? keys[0] ?? "";
+        const ek = keys.find(k => /email|correo/i.test(k)) ?? keys[1] ?? "";
+        return { nombre: String(r[nk] ?? "").trim(), email: String(r[ek] ?? "").trim().toLowerCase() };
+      }).filter(r => r.nombre && r.email && r.email.includes("@"));
+      setBulkResultados([]);
+      setFilasExcel(parsed);
+      setMostrarBulk(true);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const crearMasivo = async () => {
+    if (!filasExcel.length) return;
+    setBulkCargando(true);
+    try {
+      const res = await fetch("/api/admin/usuarios/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(filasExcel),
+      });
+      const resultados = await res.json();
+      setBulkResultados(resultados);
+      await cargarUsuarios();
+    } finally {
+      setBulkCargando(false);
+    }
+  };
+
   if (status === "loading" || !session) return null;
 
   const miId = session.user.id;
@@ -161,6 +208,16 @@ export default function AdminPage() {
             <button className="btn btn-ghost" onClick={cargarUsuarios} disabled={cargando}>
               {cargando ? <span className="spinner" /> : "↻"} Actualizar
             </button>
+            <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+              ↑ Carga masiva Excel
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              style={{ display: "none" }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleExcelFile(f); e.target.value = ""; }}
+            />
             <button className="btn" onClick={() => setMostrarForm(true)}>
               + Agregar usuario
             </button>
@@ -353,6 +410,77 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: carga masiva Excel */}
+      {mostrarBulk && (
+        <div className="overlay" onClick={() => { setMostrarBulk(false); setFilasExcel([]); setBulkResultados([]); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560, width: "95vw" }}>
+            <div className="modal-head">
+              <h3>Carga masiva de usuarios</h3>
+              <button className="modal-close" onClick={() => { setMostrarBulk(false); setFilasExcel([]); setBulkResultados([]); }}>×</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: "55vh", overflowY: "auto" }}>
+              {bulkResultados.length === 0 ? (
+                <>
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>
+                    Se crearán <strong style={{ color: "#f9fafb" }}>{filasExcel.length}</strong> usuario(s) como <em>viewer</em> con la clave genérica. Al primer ingreso se les pedirá cambiarla.
+                  </p>
+                  <div className="tabla-scroll">
+                    <table style={{ fontSize: 13 }}>
+                      <thead>
+                        <tr><th>#</th><th>Nombre</th><th>Email</th></tr>
+                      </thead>
+                      <tbody>
+                        {filasExcel.map((f, i) => (
+                          <tr key={i}>
+                            <td style={{ color: "#6b7280" }}>{i + 1}</td>
+                            <td>{f.nombre}</td>
+                            <td className="mono" style={{ color: "#6b7280" }}>{f.email}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "#9ca3af" }}>
+                    Creados: <strong style={{ color: "#4ade80" }}>{bulkResultados.filter(r => r.ok).length}</strong> &nbsp;|&nbsp;
+                    Fallidos: <strong style={{ color: "#f87171" }}>{bulkResultados.filter(r => !r.ok).length}</strong>
+                  </p>
+                  <div className="tabla-scroll">
+                    <table style={{ fontSize: 13 }}>
+                      <thead>
+                        <tr><th>Email</th><th>Resultado</th></tr>
+                      </thead>
+                      <tbody>
+                        {bulkResultados.map((r, i) => (
+                          <tr key={i}>
+                            <td className="mono" style={{ color: "#6b7280" }}>{r.email}</td>
+                            <td style={{ color: r.ok ? "#4ade80" : "#f87171" }}>
+                              {r.ok ? "✓ Creado" : `✕ ${r.error}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => { setMostrarBulk(false); setFilasExcel([]); setBulkResultados([]); }}>
+                {bulkResultados.length > 0 ? "Cerrar" : "Cancelar"}
+              </button>
+              {bulkResultados.length === 0 && (
+                <button className="btn" onClick={crearMasivo} disabled={bulkCargando || filasExcel.length === 0}>
+                  {bulkCargando ? <><span className="spinner" /> Creando…</> : `Crear ${filasExcel.length} usuario(s)`}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

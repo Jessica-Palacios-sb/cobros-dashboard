@@ -126,10 +126,12 @@ export async function getFive9Historico(
       loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
       totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0, totalTalkSeg2min: 0,
     };
-    e.totalLlamadas += r.totalLlamadas;
-    e.llamadas2min  += r.llamadas2min;
-    e.buzones       += r.buzones;
-    e.buzones40seg  += r.buzones40seg;
+    e.totalLlamadas    += r.totalLlamadas;
+    e.llamadas2min     += r.llamadas2min;
+    e.buzones          += r.buzones;
+    e.buzones40seg     += r.buzones40seg;
+    e.totalTalkSeg     += r.totalTalkSeg;
+    e.totalTalkSeg2min += r.totalTalkSeg2min;
     map.set(k, e);
   }
 

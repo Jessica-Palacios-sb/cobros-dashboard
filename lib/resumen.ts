@@ -8,6 +8,10 @@ import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { BASE_CTE } from "@/lib/filtros";
 import { corteHoy } from "@/lib/fecha";
 import type { FilaResumen, FilaFive9Metricas, ResultadoResumen } from "@/types/cobros";
+import {
+  gestorWhereCobrosRS, gestorWhereAdelantosRS,
+  gestorEfectivoSF, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
+} from "@/lib/gestorFiltro";
 import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 export type { FilaResumen, ResultadoResumen };
@@ -83,14 +87,7 @@ function merge(dest: Map<string, AggRaw>, rows: AggRaw[]) {
 
 async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
   const params: Param[] = [fd, fh, corte];
-  let extraWhere = "";
-  if (gestor === "__null__") {
-    extraWhere = `AND (gestor IS NULL OR gestor = '') AND (propietario IS NULL OR propietario = '')`;
-  } else if (gestor) {
-    params.push(`%${gestor}%`);
-    const adelantoCond = gestor === "Agente" ? ` OR sub_tipo_caso = 'Adelanto de cuotas'` : "";
-    extraWhere = `AND (COALESCE(gestor, '') ILIKE $${params.length} OR COALESCE(propietario, '') ILIKE $${params.length}${adelantoCond})`;
-  }
+  const extraWhere = gestorWhereCobrosRS(gestor);
   const rows = await runQuery(`
     ${BASE_CTE}
     SELECT
@@ -124,13 +121,8 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
 
 async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
   const params: Param[] = [fd, fh, corte];
-  let extraWhere = "";
-  if (gestor === "__null__") {
-    extraWhere = `AND (a.propietario IS NULL OR a.propietario = '')`;
-  } else if (gestor) {
-    params.push(`%${gestor}%`);
-    extraWhere = `AND COALESCE(a.propietario, '') ILIKE $${params.length}`;
-  }
+  // Adelantos son siempre Agente → excluir si se filtra por otro gestor
+  const extraWhere = gestorWhereAdelantosRS(gestor);
   const rows = await runQuery(`
     ${CTE_ADL}
     SELECT
@@ -170,7 +162,7 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
 async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
   const bogota = getBogotaToday();
   const [casos, invoices, facturas] = await Promise.all([
-    querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId
+    querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId, SBEEMO_LS_GESTOR__c
       FROM Case
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND ClosedDate >= ${bogota.startUtc}
@@ -203,7 +195,6 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
   const facByCaso = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_CASO_del__c) facByCaso.set(String(fac.SBEEMO_RB_CASO_del__c), fac);
 
-  const re = (gestor && gestor !== "__null__") ? new RegExp(gestor, "i") : null;
   const out: AggRaw[] = [];
   for (const c of casos) {
     const inv  = invByAccount.get(String(c.AccountId ?? ""));
@@ -215,10 +206,11 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
       ? Number(inv.SBEEMO_DV_AMOUNT_USD__c ?? 0)
       : Number(fac?.SBEEMO_DV_MONTO_FACTURA_DOLARES__c ?? 0);
     if (pago <= 0 || !c.ClosedDate) continue;
-    const prop = String((c.Owner as FilaSF | undefined)?.Name ?? "");
-    const isAdelantoCuotas = String(c.RecordTypeId ?? "") === "012UH000009AltJYAS";
-    if (gestor === "__null__" && prop !== "") continue;
-    if (re && !re.test(prop) && !(gestor === "Agente" && isAdelantoCuotas)) continue;
+    const prop       = String((c.Owner as FilaSF | undefined)?.Name ?? "");
+    const rtId       = String(c.RecordTypeId ?? "");
+    const gestorCampo = String((c as any).SBEEMO_LS_GESTOR__c ?? "");
+    const gEfect     = gestorEfectivoSF(rtId, prop, gestorCampo);
+    if (!pasaFiltroGestorSF(gestor, gEfect)) continue;
     out.push({ hora: horaBO(String(c.ClosedDate)), propietario: prop, cant: 1, cashTotal: pago, totalAmount: total });
   }
   return out;
@@ -257,7 +249,9 @@ async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
   const facByAccount = new Map<string, FilaSF>();
   for (const fac of facturas) if (fac.SBEEMO_RB_ACCOUNT__c) facByAccount.set(String(fac.SBEEMO_RB_ACCOUNT__c), fac);
 
-  const re = (gestor && gestor !== "__null__") ? new RegExp(gestor, "i") : null;
+  // Adelantos son siempre Agente → saltar todo si se filtra por otro gestor
+  if (!pasaFiltroGestorAdelantoSF(gestor)) return [];
+
   const out: AggRaw[] = [];
   for (const ac of acuerdos) {
     const caso      = ac.SBEEMO_RB_CASO__r as FilaSF | undefined;
@@ -273,8 +267,6 @@ async function sfAdelAggHoy(gestor?: string): Promise<AggRaw[]> {
     const lastMod = String(caso?.LastModifiedDate ?? "");
     if (pago <= 0 || !lastMod) continue;
     const prop = String((ac.Owner as FilaSF | undefined)?.Name ?? "");
-    if (gestor === "__null__" && prop !== "") continue;
-    if (re && !re.test(prop)) continue;
     out.push({ hora: horaBO(lastMod), propietario: prop, cant: 1, cashTotal: pago, totalAmount: total });
   }
   return out;

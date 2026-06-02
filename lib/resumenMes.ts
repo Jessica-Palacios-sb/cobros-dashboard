@@ -5,7 +5,9 @@ import { runQuery } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { BASE_CTE } from "@/lib/filtros";
 import { corteHoy } from "@/lib/fecha";
-import type { FilaDia, FilaHoraMes, FilaResumen, ResultadoMes } from "@/types/cobros";
+import type { FilaDia, FilaHoraMes, FilaFive9Metricas, FilaResumen, ResultadoMes } from "@/types/cobros";
+import { getFive9Hoy, type Five9Row } from "@/lib/five9";
+import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 
 const CTE_ADL = `
 WITH adelanto AS (
@@ -284,7 +286,37 @@ async function sfAdelMesHoy(gestor?: string): Promise<MesRaw[]> {
 
 // ─── Construcción del resultado ───────────────────────────────────────────────
 
-function buildResult(combined: Map<string, MesRaw>): { porDia: FilaDia[]; porPropietario: FilaResumen[] } {
+function buildFive9MesMaps(rows: Five9Row[]): {
+  byDia: Map<string, FilaFive9Metricas>;
+  byDiaHora: Map<string, FilaFive9Metricas>;  // key: "fecha||hora"
+  byProp: Map<string, FilaFive9Metricas>;
+} {
+  const byDia     = new Map<string, FilaFive9Metricas>();
+  const byDiaHora = new Map<string, FilaFive9Metricas>();
+  const byProp    = new Map<string, FilaFive9Metricas>();
+  const zero = (): FilaFive9Metricas => ({
+    loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0,
+  });
+  const add = (d: FilaFive9Metricas, r: Five9Row) => {
+    d.loginSeg += r.loginSeg; d.onCallSeg += r.onCallSeg;
+    d.notReadySeg += r.notReadySeg; d.totalLlamadas += r.totalLlamadas;
+    d.llamadas2min += r.llamadas2min; d.buzones += r.buzones;
+    d.buzones40seg += r.buzones40seg;
+  };
+  for (const r of rows) {
+    const de = byDia.get(r.fecha) ?? zero(); add(de, r); byDia.set(r.fecha, de);
+    const dhk = `${r.fecha}||${r.hora}`;
+    const dhe = byDiaHora.get(dhk) ?? zero(); add(dhe, r); byDiaHora.set(dhk, dhe);
+    const pe = byProp.get(r.propietario) ?? zero(); add(pe, r); byProp.set(r.propietario, pe);
+  }
+  return { byDia, byDiaHora, byProp };
+}
+
+function buildResult(
+  combined: Map<string, MesRaw>,
+  f9: { byDia: Map<string, FilaFive9Metricas>; byDiaHora: Map<string, FilaFive9Metricas>; byProp: Map<string, FilaFive9Metricas> }
+): { porDia: FilaDia[]; porPropietario: FilaResumen[] } {
   const totalCant = Array.from(combined.values()).reduce((s, r) => s + r.cant, 0);
 
   // Agrupar por día → horas
@@ -314,6 +346,7 @@ function buildResult(combined: Map<string, MesRaw>): { porDia: FilaDia[]; porPro
       totalAmount: d.totalAmount,
       ticket:      d.cant > 0 ? d.cashTotal / d.cant : 0,
       pct:         totalCant > 0 ? (d.cant / totalCant) * 100 : 0,
+      five9:       f9.byDia.get(fecha),
       horas:       Array.from(d.horaMap.entries())
         .map(([hora, h]): FilaHoraMes => ({
           hora,
@@ -321,6 +354,7 @@ function buildResult(combined: Map<string, MesRaw>): { porDia: FilaDia[]; porPro
           cashTotal:   h.cashTotal,
           totalAmount: h.totalAmount,
           ticket:      h.cant > 0 ? h.cashTotal / h.cant : 0,
+          five9:       f9.byDiaHora.get(`${fecha}||${hora}`),
         }))
         .sort((a, b) => a.hora - b.hora),
     }))
@@ -345,6 +379,7 @@ function buildResult(combined: Map<string, MesRaw>): { porDia: FilaDia[]; porPro
       discountPct: v.totalAmount > 0 ? ((v.totalAmount - v.cashTotal) / v.totalAmount) * 100 : 0,
       ticket:      v.cant > 0 ? v.cashTotal / v.cant : 0,
       pct:         totalCant > 0 ? (v.cant / totalCant) * 100 : 0,
+      five9:       f9.byProp.get(key),
     }))
     .sort((a, b) => b.cant - a.cant);
 
@@ -376,7 +411,11 @@ export async function getResumenMes(
 
   const incluyeHoy = corte >= fechaDesde && corte <= lastDay;
 
+  const f9Activo = !!(process.env.FIVE9_USERNAME && process.env.FIVE9_PASSWORD);
+
   let sfError: string | undefined;
+  let five9Error: string | undefined;
+
   const sfP = sfActivo && incluyeHoy
     ? Promise.all([sfCobroMesHoy(gestor, subTipo), sfAdelMesHoy(gestor)]).catch((e: any) => {
         sfError = String(e?.message ?? e);
@@ -384,10 +423,24 @@ export async function getResumenMes(
       })
     : Promise.resolve<[MesRaw[], MesRaw[]]>([[], []]);
 
-  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows]] = await Promise.all([
+  // Five9 histórico (toda la ventana Redshift)
+  const f9HistP = f9Activo
+    ? getFive9Historico(fechaDesde, corte).catch(() => [] as Five9Row[])
+    : Promise.resolve<Five9Row[]>([]);
+
+  // Five9 de hoy (API) si el mes incluye hoy
+  const f9HoyP = f9Activo && incluyeHoy
+    ? getAgentNameMap()
+        .then(m => getFive9Hoy(corte, m))
+        .catch((e: any) => { five9Error = String(e?.message ?? e); return [] as Five9Row[]; })
+    : Promise.resolve<Five9Row[]>([]);
+
+  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows], f9Hist, f9Hoy] = await Promise.all([
     rsCobroMes(fechaDesde, rsHasta, corte, gestor, subTipo),
     rsAdelMes(fechaDesde, rsHasta, corte, gestor),
     sfP,
+    f9HistP,
+    f9HoyP,
   ]);
 
   const combined = new Map<string, MesRaw>();
@@ -400,12 +453,14 @@ export async function getResumenMes(
   const totalCash   = Array.from(combined.values()).reduce((s, r) => s + r.cashTotal, 0);
   const totalAmount = Array.from(combined.values()).reduce((s, r) => s + r.totalAmount, 0);
 
-  const { porDia, porPropietario } = buildResult(combined);
+  const f9Maps = buildFive9MesMaps([...f9Hist, ...f9Hoy]);
+  const { porDia, porPropietario } = buildResult(combined, f9Maps);
 
   return {
     porDia,
     porPropietario,
     totales: { cant: totalCant, cashTotal: totalCash, totalAmount, ticket: totalCant > 0 ? totalCash / totalCant : 0 },
     sfError,
+    five9Error,
   };
 }

@@ -5,6 +5,12 @@ import type { FilaDia, FilaResumen, ResultadoMes } from "@/types/cobros";
 const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const fmtNum = (n: number) => n.toLocaleString("es-CO");
 const fmtPct = (n: number) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
+function fmtSeg(s: number | undefined): string {
+  if (!s) return "—";
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+}
 
 function getMesesDisponibles(): { value: string; label: string }[] {
   const result = [];
@@ -62,16 +68,18 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
               <th style={{ textAlign: "right" }}>Cash Total</th>
               <th style={{ textAlign: "right" }}>Ticket</th>
               <th style={{ textAlign: "right" }}>% Total</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Llamadas</th>
+              <th style={{ textAlign: "right" }} className="col-f9">&gt;2min</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Buzones</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Buz&gt;40s</th>
+              <th style={{ textAlign: "right" }} className="col-f9">On Call</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Not Ready</th>
             </tr>
           </thead>
           <tbody>
             {filas.map(f => (
               <React.Fragment key={f.fecha}>
-                <tr
-                  className="fila-dia"
-                  onClick={() => toggle(f.fecha)}
-                  style={{ cursor: "pointer" }}
-                >
+                <tr className="fila-dia" onClick={() => toggle(f.fecha)} style={{ cursor: "pointer" }}>
                   <td>
                     <span className="expand-icon">{expanded.has(f.fecha) ? "▼" : "▶"}</span>
                     {formatFechaDia(f.fecha)}
@@ -80,6 +88,12 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
                   <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                   <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
                   <td style={{ textAlign: "right" }}>{fmtPct(f.pct)}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones40seg) : "—"}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.onCallSeg)}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.notReadySeg)}</td>
                 </tr>
                 {expanded.has(f.fecha) && f.horas.map(h => (
                   <tr key={`${f.fecha}-${h.hora}`} className="fila-hora-mes">
@@ -88,6 +102,12 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
                     <td style={{ textAlign: "right" }}>{fmtUSD.format(h.cashTotal)}</td>
                     <td style={{ textAlign: "right" }}>{fmtUSD.format(h.ticket)}</td>
                     <td></td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.totalLlamadas) : "—"}</td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.llamadas2min) : "—"}</td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.buzones) : "—"}</td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.buzones40seg) : "—"}</td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(h.five9?.onCallSeg)}</td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(h.five9?.notReadySeg)}</td>
                   </tr>
                 ))}
               </React.Fragment>
@@ -102,6 +122,7 @@ function TablaDias({ filas }: { filas: FilaDia[] }) {
                 <strong>{total > 0 ? fmtUSD.format(totalCash / total) : "—"}</strong>
               </td>
               <td style={{ textAlign: "right" }}><strong>100%</strong></td>
+              <td colSpan={6} className="col-f9" />
             </tr>
           </tfoot>
         </table>
@@ -128,6 +149,12 @@ function TablaPropietario({ filas }: { filas: FilaResumen[] }) {
               <th style={{ textAlign: "right" }}>Cash Total</th>
               <th style={{ textAlign: "right" }}>Ticket</th>
               <th style={{ textAlign: "right" }}>% Total</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Llamadas</th>
+              <th style={{ textAlign: "right" }} className="col-f9">&gt;2min</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Buzones</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Buz&gt;40s</th>
+              <th style={{ textAlign: "right" }} className="col-f9">On Call</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Not Ready</th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +165,12 @@ function TablaPropietario({ filas }: { filas: FilaResumen[] }) {
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.cashTotal)}</td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.ticket)}</td>
                 <td style={{ textAlign: "right" }}>{fmtPct(f.pct)}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones40seg) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.onCallSeg)}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.notReadySeg)}</td>
               </tr>
             ))}
           </tbody>
@@ -150,6 +183,7 @@ function TablaPropietario({ filas }: { filas: FilaResumen[] }) {
                 <strong>{total > 0 ? fmtUSD.format(totalCash / total) : "—"}</strong>
               </td>
               <td style={{ textAlign: "right" }}><strong>100%</strong></td>
+              <td colSpan={6} className="col-f9" />
             </tr>
           </tfoot>
         </table>

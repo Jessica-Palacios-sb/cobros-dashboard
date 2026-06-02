@@ -353,6 +353,17 @@ select {
   background: var(--accent-soft);
 }
 
+/* ===== Columnas Five9 ===== */
+.col-f9 {
+  color: var(--text-muted);
+  font-size: 0.82em;
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+th.col-f9 {
+  font-size: 0.78em;
+  opacity: 0.75;
+}
+
 /* ===== Vista Mes: filas expandibles ===== */
 .fila-dia {
   background: var(--bg-card);

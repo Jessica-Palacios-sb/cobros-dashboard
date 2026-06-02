@@ -141,6 +141,7 @@ export interface FilaResumen {
   discountPct: number;
   ticket: number;
   pct: number;
+  five9?: FilaFive9Metricas;
 }
 
 export interface ResultadoResumen {
@@ -149,6 +150,7 @@ export interface ResultadoResumen {
   totales: { cant: number; cashTotal: number; ticket: number };
   actualizadoEn: string;
   sfError?: string;
+  five9Error?: string;
 }
 
 export interface FilaDetalle {
@@ -177,6 +179,7 @@ export interface FilaHoraMes {
   cashTotal: number;
   totalAmount: number;
   ticket: number;
+  five9?: FilaFive9Metricas;
 }
 
 export interface FilaDia {
@@ -187,6 +190,7 @@ export interface FilaDia {
   ticket: number;
   pct: number;
   horas: FilaHoraMes[];
+  five9?: FilaFive9Metricas;
 }
 
 export interface ResultadoMes {
@@ -194,4 +198,17 @@ export interface ResultadoMes {
   porPropietario: FilaResumen[];
   totales: { cant: number; cashTotal: number; totalAmount: number; ticket: number };
   sfError?: string;
+  five9Error?: string;
+}
+
+// ─── Five9 ────────────────────────────────────────────────────────────────────
+
+export interface FilaFive9Metricas {
+  loginSeg: number;
+  onCallSeg: number;
+  notReadySeg: number;
+  totalLlamadas: number;
+  llamadas2min: number;
+  buzones: number;
+  buzones40seg: number;
 }

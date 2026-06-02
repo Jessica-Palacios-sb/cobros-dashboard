@@ -22,6 +22,12 @@ function inicioMesBogota() {
 const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const fmtPct = (n: number) => (isNaN(n) ? "—" : n.toFixed(1) + "%");
 const fmtNum = (n: number) => n.toLocaleString("es-CO");
+function fmtSeg(s: number | undefined): string {
+  if (!s) return "—";
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+}
 const fmtFecha = (iso: string) =>
   iso ? new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—";
 
@@ -66,12 +72,18 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
           <thead>
             <tr>
               <th>{label === "Por hora" ? "Hora" : "Propietario"}</th>
-              <th style={{ textAlign: "right" }}>Cant Total</th>
+              <th style={{ textAlign: "right" }}>Cant</th>
               <th style={{ textAlign: "right" }}>Cash Total</th>
               <th style={{ textAlign: "right" }}>Ticket</th>
               <th style={{ textAlign: "right" }}>% Cobros</th>
               <th style={{ textAlign: "right" }}>Monto Factura</th>
               <th style={{ textAlign: "right" }}>% Descuento</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Llamadas</th>
+              <th style={{ textAlign: "right" }} className="col-f9">&gt;2min</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Buzones</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Buz&gt;40s</th>
+              <th style={{ textAlign: "right" }} className="col-f9">On Call</th>
+              <th style={{ textAlign: "right" }} className="col-f9">Not Ready</th>
             </tr>
           </thead>
           <tbody>
@@ -98,6 +110,12 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
                 </td>
                 <td style={{ textAlign: "right" }}>{fmtUSD.format(f.totalAmount)}</td>
                 <td style={{ textAlign: "right" }}>{fmtPct(f.discountPct)}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones40seg) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.onCallSeg)}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(f.five9?.notReadySeg)}</td>
               </tr>
             ))}
           </tbody>
@@ -118,6 +136,7 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
               <td style={{ textAlign: "right" }}>
                 <strong>{totalAmt > 0 ? fmtPct((totalAmt - totalCash) / totalAmt) : "—"}</strong>
               </td>
+              <td colSpan={6} className="col-f9" />
             </tr>
           </tfoot>
         </table>

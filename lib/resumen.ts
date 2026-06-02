@@ -7,7 +7,9 @@ import { runQuery } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { BASE_CTE } from "@/lib/filtros";
 import { corteHoy } from "@/lib/fecha";
-import type { FilaResumen, ResultadoResumen } from "@/types/cobros";
+import type { FilaResumen, FilaFive9Metricas, ResultadoResumen } from "@/types/cobros";
+import { getFive9Hoy, type Five9Row } from "@/lib/five9";
+import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -308,18 +310,51 @@ function toResumen(
   });
 }
 
+// ─── Utilidades Five9 ─────────────────────────────────────────────────────────
+
+function buildFive9Maps(rows: Five9Row[]): {
+  byHora: Map<string, FilaFive9Metricas>;
+  byProp: Map<string, FilaFive9Metricas>;
+} {
+  const byHora = new Map<string, FilaFive9Metricas>();
+  const byProp = new Map<string, FilaFive9Metricas>();
+  const zero = (): FilaFive9Metricas => ({
+    loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0,
+  });
+  const add = (dest: FilaFive9Metricas, r: Five9Row) => {
+    dest.loginSeg     += r.loginSeg;
+    dest.onCallSeg    += r.onCallSeg;
+    dest.notReadySeg  += r.notReadySeg;
+    dest.totalLlamadas += r.totalLlamadas;
+    dest.llamadas2min += r.llamadas2min;
+    dest.buzones      += r.buzones;
+    dest.buzones40seg += r.buzones40seg;
+  };
+  for (const r of rows) {
+    const hk = String(r.hora);
+    const he = byHora.get(hk) ?? zero(); add(he, r); byHora.set(hk, he);
+    const pe = byProp.get(r.propietario) ?? zero(); add(pe, r); byProp.set(r.propietario, pe);
+  }
+  return { byHora, byProp };
+}
+
+// ─── getResumen ───────────────────────────────────────────────────────────────
+
 export async function getResumen(
   fechaDesde: string,
   fechaHasta: string,
   gestor?: string
 ): Promise<ResultadoResumen> {
-  const corte    = corteHoy();
-  const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
+  const corte      = corteHoy();
+  const sfActivo   = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
+  const f9Activo   = !!(process.env.FIVE9_USERNAME && process.env.FIVE9_PASSWORD);
   const incluyeHoy = fechaHasta >= corte;
 
   let sfError: string | undefined;
+  let five9Error: string | undefined;
 
-  // Queries en paralelo: Redshift (cobros + adelantos) + SF si aplica
+  // SF cobros + adelantos de hoy
   const sfP = sfActivo && incluyeHoy
     ? Promise.all([sfCobroAggHoy(gestor), sfAdelAggHoy(gestor)]).catch((e: any) => {
         sfError = String(e?.message ?? e);
@@ -327,13 +362,26 @@ export async function getResumen(
       })
     : Promise.resolve<[AggRaw[], AggRaw[]]>([[], []]);
 
-  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows]] = await Promise.all([
+  // Five9 histórico (Redshift) + hoy (API) en paralelo
+  const f9HistP = f9Activo
+    ? getFive9Historico(fechaDesde, corte).catch(() => [] as Five9Row[])
+    : Promise.resolve<Five9Row[]>([]);
+
+  const f9HoyP = f9Activo && incluyeHoy
+    ? getAgentNameMap()
+        .then(nameMap => getFive9Hoy(corte, nameMap))
+        .catch((e: any) => { five9Error = String(e?.message ?? e); return [] as Five9Row[]; })
+    : Promise.resolve<Five9Row[]>([]);
+
+  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows], f9Hist, f9Hoy] = await Promise.all([
     rsCobroAgg(fechaDesde, fechaHasta, corte, gestor),
     rsAdelAgg(fechaDesde, fechaHasta, corte, gestor),
     sfP,
+    f9HistP,
+    f9HoyP,
   ]);
 
-  // Unificar todo en un Map por (hora, propietario)
+  // Cobros + adelantos
   const combined = new Map<string, AggRaw>();
   merge(combined, rsCobroRows);
   merge(combined, rsAdelRows);
@@ -341,24 +389,26 @@ export async function getResumen(
   merge(combined, sfAdelRows);
 
   const totalCant = Array.from(combined.values()).reduce((s, r) => s + r.cant, 0);
+  const totalCash = Array.from(combined.values()).reduce((s, r) => s + r.cashTotal, 0);
+
+  // Five9: fusionar histórico + hoy y construir mapas por hora y propietario
+  const allF9 = [...f9Hist, ...f9Hoy];
+  const { byHora: f9ByHora, byProp: f9ByProp } = buildFive9Maps(allF9);
 
   const porHora = toResumen(combined, r => String(r.hora), totalCant)
-    .sort((a, b) => Number(a.key) - Number(b.key));
+    .sort((a, b) => Number(a.key) - Number(b.key))
+    .map(f => ({ ...f, five9: f9ByHora.get(f.key) }));
 
   const porPropietario = toResumen(combined, r => r.propietario, totalCant)
-    .sort((a, b) => b.cant - a.cant);
-
-  const totalCash = Array.from(combined.values()).reduce((s, r) => s + r.cashTotal, 0);
+    .sort((a, b) => b.cant - a.cant)
+    .map(f => ({ ...f, five9: f9ByProp.get(f.key) }));
 
   return {
     porHora,
     porPropietario,
-    totales: {
-      cant:      totalCant,
-      cashTotal: totalCash,
-      ticket:    totalCant > 0 ? totalCash / totalCant : 0,
-    },
+    totales: { cant: totalCant, cashTotal: totalCash, ticket: totalCant > 0 ? totalCash / totalCant : 0 },
     sfError,
+    five9Error,
     actualizadoEn: new Date().toISOString(),
   };
 }

@@ -1,12 +1,16 @@
 import { getDb } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
+// Contraseña genérica asignada en carga masiva
+export const CLAVE_GENERICA = "Beemo2024!";
+
 export interface Usuario {
   id: string;
   email: string;
   nombre: string;
   rol: "admin" | "viewer";
   activo: boolean;
+  mustChangePassword: boolean;
   creadoEn: string;
 }
 
@@ -16,15 +20,21 @@ export async function initTabla(): Promise<void> {
   const sql = getDb();
   await sql`
     CREATE TABLE IF NOT EXISTS usuarios (
-      id            SERIAL PRIMARY KEY,
-      email         VARCHAR(255) UNIQUE NOT NULL,
-      nombre        VARCHAR(255) NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      rol           VARCHAR(20) NOT NULL DEFAULT 'viewer'
-                      CHECK (rol IN ('admin', 'viewer')),
-      activo        BOOLEAN NOT NULL DEFAULT true,
-      creado_en     TIMESTAMPTZ DEFAULT NOW()
+      id                  SERIAL PRIMARY KEY,
+      email               VARCHAR(255) UNIQUE NOT NULL,
+      nombre              VARCHAR(255) NOT NULL,
+      password_hash       VARCHAR(255) NOT NULL,
+      rol                 VARCHAR(20) NOT NULL DEFAULT 'viewer'
+                            CHECK (rol IN ('admin', 'viewer')),
+      activo              BOOLEAN NOT NULL DEFAULT true,
+      must_change_password BOOLEAN NOT NULL DEFAULT false,
+      creado_en           TIMESTAMPTZ DEFAULT NOW()
     )
+  `;
+  // Migración idempotente: agrega la columna si la tabla ya existía sin ella
+  await sql`
+    ALTER TABLE usuarios
+      ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false
   `;
 }
 
@@ -37,12 +47,12 @@ export async function tablaVacia(): Promise<boolean> {
 export async function getUserByEmail(email: string): Promise<UsuarioConHash | null> {
   const sql = getDb();
   const rows = await sql`
-    SELECT id, email, nombre, rol, activo, password_hash
+    SELECT id, email, nombre, rol, activo, must_change_password, password_hash
     FROM usuarios WHERE email = ${email.toLowerCase()} LIMIT 1
   `;
   if (!rows[0]) return null;
   const r = rows[0] as any;
-  return { ...r, id: String(r.id) } as UsuarioConHash;
+  return { ...r, id: String(r.id), mustChangePassword: r.must_change_password ?? false } as UsuarioConHash;
 }
 
 export async function verifyUser(email: string, password: string): Promise<Usuario | null> {
@@ -51,22 +61,25 @@ export async function verifyUser(email: string, password: string): Promise<Usuar
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return null;
   const { password_hash, ...rest } = user;
-  return rest;
+  return rest as Usuario;
 }
 
 export async function listUsers(): Promise<Usuario[]> {
   const sql = getDb();
+  // Ejecuta la migración en el primer acceso post-deploy
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
   const rows = await sql`
-    SELECT id, email, nombre, rol, activo, creado_en
+    SELECT id, email, nombre, rol, activo, must_change_password, creado_en
     FROM usuarios ORDER BY nombre
   `;
   return (rows as any[]).map((r) => ({
-    id:       String(r.id),
-    email:    r.email,
-    nombre:   r.nombre,
-    rol:      r.rol,
-    activo:   r.activo,
-    creadoEn: r.creado_en ? new Date(r.creado_en).toISOString() : "",
+    id:                 String(r.id),
+    email:              r.email,
+    nombre:             r.nombre,
+    rol:                r.rol,
+    activo:             r.activo,
+    mustChangePassword: r.must_change_password ?? false,
+    creadoEn:           r.creado_en ? new Date(r.creado_en).toISOString() : "",
   }));
 }
 

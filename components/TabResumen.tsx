@@ -26,7 +26,8 @@ function fmtSeg(s: number | undefined): string {
   if (!s) return "—";
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m}min`;
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
 function buz40Color(n: number, max: number): string {

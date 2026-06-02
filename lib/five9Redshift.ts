@@ -37,9 +37,8 @@ async function queryTiempos(fd: string, fh: string): Promise<Five9Row[]> {
       ,SUM(c.not_ready_time_seconds)                AS not_ready_seg
     FROM salesforce.five9_tabla_core_tiempos_conexion AS c
     LEFT JOIN salesforce.tabla_core_user AS u
-      ON c.agent = u.username
-    WHERE u.sbf_grupo__c = 'Collection'
-      AND c.fecha >= $1
+      ON c.agent = u.username AND u.sbf_grupo__c = 'Collection'
+    WHERE c.fecha >= $1
       AND c.fecha <  $2
     GROUP BY 1, 2, 3, 4
   `, params);
@@ -72,9 +71,8 @@ async function queryLlamadas(fd: string, fh: string): Promise<Five9Row[]> {
                   THEN c.call_id END)                         AS buzones_40seg
     FROM salesforce.five9_tabla_core_call_log AS c
     LEFT JOIN salesforce.tabla_core_user AS u
-      ON c.agent = u.username
-    WHERE u.sbf_grupo__c = 'Collection'
-      AND c.fecha >= $1
+      ON c.agent = u.username AND u.sbf_grupo__c = 'Collection'
+    WHERE c.fecha >= $1
       AND c.fecha <  $2
     GROUP BY 1, 2, 3, 4
   `, params);

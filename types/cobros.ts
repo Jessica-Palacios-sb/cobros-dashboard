@@ -199,6 +199,7 @@ export interface ResultadoMes {
   totales: { cant: number; cashTotal: number; totalAmount: number; ticket: number };
   sfError?: string;
   five9Error?: string;
+  five9Activo?: boolean;
 }
 
 // ─── Five9 ────────────────────────────────────────────────────────────────────

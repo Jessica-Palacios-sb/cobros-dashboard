@@ -423,16 +423,24 @@ export async function getResumenMes(
       })
     : Promise.resolve<[MesRaw[], MesRaw[]]>([[], []]);
 
+  const f9Errors: string[] = [];
+
   // Five9 histórico (toda la ventana Redshift)
   const f9HistP = f9Activo
-    ? getFive9Historico(fechaDesde, corte).catch(() => [] as Five9Row[])
+    ? getFive9Historico(fechaDesde, corte).catch((e: any) => {
+        f9Errors.push(`Histórico: ${String(e?.message ?? e)}`);
+        return [] as Five9Row[];
+      })
     : Promise.resolve<Five9Row[]>([]);
 
   // Five9 de hoy (API) si el mes incluye hoy
   const f9HoyP = f9Activo && incluyeHoy
     ? getAgentNameMap()
         .then(m => getFive9Hoy(corte, m))
-        .catch((e: any) => { five9Error = String(e?.message ?? e); return [] as Five9Row[]; })
+        .catch((e: any) => {
+          f9Errors.push(`Hoy: ${String(e?.message ?? e)}`);
+          return [] as Five9Row[];
+        })
     : Promise.resolve<Five9Row[]>([]);
 
   const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows], f9Hist, f9Hoy] = await Promise.all([
@@ -461,6 +469,7 @@ export async function getResumenMes(
     porPropietario,
     totales: { cant: totalCant, cashTotal: totalCash, totalAmount, ticket: totalCant > 0 ? totalCash / totalCant : 0 },
     sfError,
-    five9Error,
+    five9Error: f9Errors.length > 0 ? f9Errors.join(" | ") : five9Error,
+    five9Activo: f9Activo,
   };
 }

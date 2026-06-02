@@ -134,18 +134,18 @@ export interface Five9Row {
 // ─── Función principal ────────────────────────────────────────────────────────
 
 /**
- * Trae los dos reportes Five9 para bogotaDate (YYYY-MM-DD en hora Bogotá)
- * y los fusiona por (agent, hora Bogotá).
+ * Trae los dos reportes Five9 desde startDate (YYYY-MM-DD en hora Bogotá)
+ * hasta el momento actual y los fusiona por (fecha, agent, hora Bogotá).
+ * Usar para cubrir los últimos N días cuando el ETL de Redshift aún no los tiene.
  * agentNameMap: email → nombre display (consultar Redshift tabla_core_user)
  */
 export async function getFive9Hoy(
-  bogotaDate: string,
+  startDate: string,
   agentNameMap: Map<string, string>
 ): Promise<Five9Row[]> {
-  // Inicio del reporte en hora Pacific: Bogotá 00:00 = Pacific 21:00 día anterior.
-  // Para simplificar arrancamos desde la misma fecha en Pacific 00:00,
-  // que equivale a Bogotá 03:00 — captura toda la jornada laboral (≥7am Bogotá).
-  const reportStart = `${bogotaDate}T00:00:00`;
+  // Arrancamos desde startDate en Pacific 00:00 (= Bogotá 03:00),
+  // captura toda la jornada laboral (≥7am Bogotá) de cada día.
+  const reportStart = `${startDate}T00:00:00`;
 
   const [idConex, idLlam] = await Promise.all([
     runReport("Conexion Cobranzas", reportStart),
@@ -154,16 +154,17 @@ export async function getFive9Hoy(
   await Promise.all([waitReport(idConex), waitReport(idLlam)]);
   const [csvConex, csvLlam] = await Promise.all([getCSV(idConex), getCSV(idLlam)]);
 
+  // Clave incluye fecha para no mezclar horas iguales de días distintos
   const map = new Map<string, Five9Row>();
 
-  // 1. "Conexion Cobranzas" → ya agregado por Five9 (un fila por agent/hora)
+  // 1. "Conexion Cobranzas" → ya agregado por Five9 (una fila por agent/hora)
   for (const r of parseCSV(csvConex)) {
-    const agent     = r["AGENT"] ?? "";
-    const fechaBog  = pacificDateToBogota(r["DATE"] ?? bogotaDate, r["HOUR"] ?? "0:00");
-    if (fechaBog !== bogotaDate) continue;   // solo hoy en Bogotá
+    const agent    = r["AGENT"] ?? "";
+    const fechaBog = pacificDateToBogota(r["DATE"] ?? startDate, r["HOUR"] ?? "0:00");
+    if (fechaBog < startDate) continue;  // descartar filas anteriores a startDate
     const hora = pacificToBogota(r["HOUR"] ?? "0:00");
     const prop = agentNameMap.get(agent) ?? agent;
-    const key  = `${agent}||${hora}`;
+    const key  = `${fechaBog}||${agent}||${hora}`;
     map.set(key, {
       fecha: fechaBog, hora, propietario: prop,
       loginSeg:      toSec(r["LOGIN_TIME"]),
@@ -177,11 +178,11 @@ export async function getFive9Hoy(
   // 2. "Llamadas cobranzas" → una fila por llamada → agregar métricas
   for (const r of parseCSV(csvLlam)) {
     const agent    = r["AGENT"] ?? "";
-    const fechaBog = pacificDateToBogota(r["DATE"] ?? bogotaDate, r["HOUR"] ?? "0:00");
-    if (fechaBog !== bogotaDate) continue;
+    const fechaBog = pacificDateToBogota(r["DATE"] ?? startDate, r["HOUR"] ?? "0:00");
+    if (fechaBog < startDate) continue;
     const hora = pacificToBogota(r["HOUR"] ?? "0:00");
     const prop = agentNameMap.get(agent) ?? agent;
-    const key  = `${agent}||${hora}`;
+    const key  = `${fechaBog}||${agent}||${hora}`;
     const talkSec = toSec(r["TALK_TIME"]);
     const esBuzon = r["DISPOSITION"] === "Buzon de Voz";
 

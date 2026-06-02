@@ -50,7 +50,7 @@ async function queryTiempos(fd: string, fh: string): Promise<Five9Row[]> {
     loginSeg:      Number(r.login_seg    ?? 0),
     onCallSeg:     Number(r.on_call_seg  ?? 0),
     notReadySeg:   Number(r.not_ready_seg ?? 0),
-    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
   }));
 }
 
@@ -69,6 +69,7 @@ async function queryLlamadas(fd: string, fh: string): Promise<Five9Row[]> {
       ,COUNT(CASE WHEN c.disposition = 'Buzon de Voz' THEN c.call_id END)           AS buzones
       ,COUNT(CASE WHEN c.disposition = 'Buzon de Voz' AND c.seconds_talk_time >= 40
                   THEN c.call_id END)                         AS buzones_40seg
+      ,COALESCE(SUM(c.seconds_talk_time), 0)                 AS total_talk_seg
     FROM salesforce.five9_tabla_core_call_log AS c
     LEFT JOIN salesforce.tabla_core_user AS u
       ON c.agent = u.username AND u.sbf_grupo__c = 'Collection'
@@ -82,10 +83,11 @@ async function queryLlamadas(fd: string, fh: string): Promise<Five9Row[]> {
     hora:          Number(r.hora ?? 0),
     propietario:   String(r.propietario ?? r.agent ?? ""),
     loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-    totalLlamadas: Number(r.total_llamadas ?? 0),
-    llamadas2min:  Number(r.llamadas_2min  ?? 0),
-    buzones:       Number(r.buzones        ?? 0),
-    buzones40seg:  Number(r.buzones_40seg  ?? 0),
+    totalLlamadas: Number(r.total_llamadas  ?? 0),
+    llamadas2min:  Number(r.llamadas_2min   ?? 0),
+    buzones:       Number(r.buzones         ?? 0),
+    buzones40seg:  Number(r.buzones_40seg   ?? 0),
+    totalTalkSeg:  Number(r.total_talk_seg  ?? 0),
   }));
 }
 
@@ -112,7 +114,7 @@ export async function getFive9Historico(
     const e = map.get(k) ?? {
       fecha: r.fecha, hora: r.hora, propietario: r.propietario,
       loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-      totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0,
+      totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
     };
     e.totalLlamadas += r.totalLlamadas;
     e.llamadas2min  += r.llamadas2min;

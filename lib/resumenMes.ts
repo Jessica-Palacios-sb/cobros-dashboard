@@ -4,7 +4,7 @@
 import { runQuery } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { BASE_CTE } from "@/lib/filtros";
-import { corteHoy, fechaHaceNDias } from "@/lib/fecha";
+import { corteHoy } from "@/lib/fecha";
 import type { FilaDia, FilaHoraMes, FilaFive9Metricas, FilaResumen, ResultadoMes } from "@/types/cobros";
 import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
@@ -296,13 +296,13 @@ function buildFive9MesMaps(rows: Five9Row[]): {
   const byProp    = new Map<string, FilaFive9Metricas>();
   const zero = (): FilaFive9Metricas => ({
     loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
   });
   const add = (d: FilaFive9Metricas, r: Five9Row) => {
-    d.loginSeg += r.loginSeg; d.onCallSeg += r.onCallSeg;
-    d.notReadySeg += r.notReadySeg; d.totalLlamadas += r.totalLlamadas;
-    d.llamadas2min += r.llamadas2min; d.buzones += r.buzones;
-    d.buzones40seg += r.buzones40seg;
+    d.loginSeg      += r.loginSeg;     d.onCallSeg    += r.onCallSeg;
+    d.notReadySeg   += r.notReadySeg;  d.totalLlamadas += r.totalLlamadas;
+    d.llamadas2min  += r.llamadas2min; d.buzones       += r.buzones;
+    d.buzones40seg  += r.buzones40seg; d.totalTalkSeg  += r.totalTalkSeg;
   };
   for (const r of rows) {
     const de = byDia.get(r.fecha) ?? zero(); add(de, r); byDia.set(r.fecha, de);
@@ -425,26 +425,18 @@ export async function getResumenMes(
 
   const f9Errors: string[] = [];
 
-  // Para el mes actual: el API cubre los últimos 3 días (lag del ETL de Redshift).
-  // Redshift cubre el resto del mes sin solaparse.
-  const DIAS_API = 3;
-  const f9ApiStart = incluyeHoy
-    ? (fechaHaceNDias(DIAS_API) > fechaDesde ? fechaHaceNDias(DIAS_API) : fechaDesde)
-    : corte; // mes pasado: no se llama al API, valor irrelevante
-
-  // Five9 histórico Redshift: solo hasta f9ApiStart para evitar duplicados con el API
-  const f9HistHasta = incluyeHoy ? f9ApiStart : corte;
-  const f9HistP = f9Activo && f9HistHasta > fechaDesde
-    ? getFive9Historico(fechaDesde, f9HistHasta).catch((e: any) => {
+  // Five9 histórico Redshift: desde inicio del mes hasta ayer (< corte)
+  const f9HistP = f9Activo
+    ? getFive9Historico(fechaDesde, corte).catch((e: any) => {
         f9Errors.push(`Histórico: ${String(e?.message ?? e)}`);
         return [] as Five9Row[];
       })
     : Promise.resolve<Five9Row[]>([]);
 
-  // Five9 API: cubre los últimos DIAS_API días + hoy (sin solaparse con Redshift)
+  // Five9 API: solo hoy (cuando el mes actual está seleccionado)
   const f9HoyP = f9Activo && incluyeHoy
     ? getAgentNameMap()
-        .then(m => getFive9Hoy(f9ApiStart, m))
+        .then(m => getFive9Hoy(corte, m))
         .catch((e: any) => {
           f9Errors.push(`API: ${String(e?.message ?? e)}`);
           return [] as Five9Row[];

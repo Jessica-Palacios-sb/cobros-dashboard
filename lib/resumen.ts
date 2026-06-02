@@ -320,16 +320,17 @@ function buildFive9Maps(rows: Five9Row[]): {
   const byProp = new Map<string, FilaFive9Metricas>();
   const zero = (): FilaFive9Metricas => ({
     loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
   });
   const add = (dest: FilaFive9Metricas, r: Five9Row) => {
-    dest.loginSeg     += r.loginSeg;
-    dest.onCallSeg    += r.onCallSeg;
-    dest.notReadySeg  += r.notReadySeg;
+    dest.loginSeg      += r.loginSeg;
+    dest.onCallSeg     += r.onCallSeg;
+    dest.notReadySeg   += r.notReadySeg;
     dest.totalLlamadas += r.totalLlamadas;
-    dest.llamadas2min += r.llamadas2min;
-    dest.buzones      += r.buzones;
-    dest.buzones40seg += r.buzones40seg;
+    dest.llamadas2min  += r.llamadas2min;
+    dest.buzones       += r.buzones;
+    dest.buzones40seg  += r.buzones40seg;
+    dest.totalTalkSeg  += r.totalTalkSeg;
   };
   for (const r of rows) {
     const hk = String(r.hora);

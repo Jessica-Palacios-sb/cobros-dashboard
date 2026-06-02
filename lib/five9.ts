@@ -130,6 +130,7 @@ export interface Five9Row {
   buzones: number;
   buzones40seg: number;
   totalTalkSeg: number;
+  totalTalkSeg2min: number;
 }
 
 // ─── Función principal ────────────────────────────────────────────────────────
@@ -172,7 +173,7 @@ export async function getFive9Hoy(
       onCallSeg:     toSec(r["ON_CALL_TIME"]),
       notReadySeg:   toSec(r["NOT_READY_TIME"]),
       totalLlamadas: Number(r["CALLS_COUNT"] ?? 0),
-      llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
+      llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0, totalTalkSeg2min: 0,
     });
   }
 
@@ -190,11 +191,11 @@ export async function getFive9Hoy(
     const e = map.get(key) ?? {
       fecha: fechaBog, hora, propietario: prop,
       loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-      totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
+      totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0, totalTalkSeg2min: 0,
     };
     e.totalLlamadas += 1;
     e.totalTalkSeg  += talkSec;
-    if (talkSec >= 120)           e.llamadas2min++;
+    if (talkSec >= 120) { e.llamadas2min++; e.totalTalkSeg2min += talkSec; }
     if (esBuzon)                  e.buzones++;
     if (esBuzon && talkSec >= 40) e.buzones40seg++;
     map.set(key, e);

@@ -296,13 +296,14 @@ function buildFive9MesMaps(rows: Five9Row[]): {
   const byProp    = new Map<string, FilaFive9Metricas>();
   const zero = (): FilaFive9Metricas => ({
     loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0, totalTalkSeg2min: 0,
   });
   const add = (d: FilaFive9Metricas, r: Five9Row) => {
-    d.loginSeg      += r.loginSeg;     d.onCallSeg    += r.onCallSeg;
-    d.notReadySeg   += r.notReadySeg;  d.totalLlamadas += r.totalLlamadas;
-    d.llamadas2min  += r.llamadas2min; d.buzones       += r.buzones;
-    d.buzones40seg  += r.buzones40seg; d.totalTalkSeg  += r.totalTalkSeg;
+    d.loginSeg         += r.loginSeg;         d.onCallSeg        += r.onCallSeg;
+    d.notReadySeg      += r.notReadySeg;       d.totalLlamadas    += r.totalLlamadas;
+    d.llamadas2min     += r.llamadas2min;      d.buzones          += r.buzones;
+    d.buzones40seg     += r.buzones40seg;      d.totalTalkSeg     += r.totalTalkSeg;
+    d.totalTalkSeg2min += r.totalTalkSeg2min;
   };
   for (const r of rows) {
     const de = byDia.get(r.fecha) ?? zero(); add(de, r); byDia.set(r.fecha, de);

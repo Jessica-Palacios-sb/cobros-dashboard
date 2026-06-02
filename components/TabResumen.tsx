@@ -125,7 +125,7 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.totalLlamadas > 0 ? fmtPct(f.five9.llamadas2min / f.five9.totalLlamadas * 100) : "—"}</td>
-                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.totalLlamadas > 0 ? fmtSeg(Math.round(f.five9.totalTalkSeg / f.five9.totalLlamadas)) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.llamadas2min > 0 ? fmtSeg(Math.round(f.five9.totalTalkSeg2min / f.five9.llamadas2min)) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">
                   {f.five9

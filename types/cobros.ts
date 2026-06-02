@@ -213,4 +213,5 @@ export interface FilaFive9Metricas {
   buzones: number;
   buzones40seg: number;
   totalTalkSeg: number;
+  totalTalkSeg2min: number;
 }

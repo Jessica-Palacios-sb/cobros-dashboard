@@ -8,6 +8,14 @@ import type { Five9Row } from "@/lib/five9";
 
 type Param = string | number | boolean | null;
 
+// El driver pg convierte columnas DATE a objetos JavaScript Date.
+// String(date).substring(0,10) produce "Thu Apr 30..." en lugar de "2026-04-30".
+function toDateStr(v: unknown): string {
+  if (!v) return "";
+  if (v instanceof Date) return v.toISOString().substring(0, 10);
+  return String(v).substring(0, 10);
+}
+
 // ─── Lookup email → nombre display ───────────────────────────────────────────
 
 export async function getAgentNameMap(): Promise<Map<string, string>> {
@@ -44,13 +52,13 @@ async function queryTiempos(fd: string, fh: string): Promise<Five9Row[]> {
   `, params);
 
   return rows.map(r => ({
-    fecha:         String(r.fecha ?? "").substring(0, 10),
+    fecha:         toDateStr(r.fecha),
     hora:          Number(r.hora ?? 0),
     propietario:   String(r.propietario ?? r.agent ?? ""),
     loginSeg:      Number(r.login_seg    ?? 0),
     onCallSeg:     Number(r.on_call_seg  ?? 0),
     notReadySeg:   Number(r.not_ready_seg ?? 0),
-    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
+    totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0, totalTalkSeg2min: 0,
   }));
 }
 
@@ -70,6 +78,7 @@ async function queryLlamadas(fd: string, fh: string): Promise<Five9Row[]> {
       ,COUNT(CASE WHEN c.disposition = 'Buzon de Voz' AND c.seconds_talk_time >= 40
                   THEN c.call_id END)                         AS buzones_40seg
       ,COALESCE(SUM(c.seconds_talk_time), 0)                 AS total_talk_seg
+      ,COALESCE(SUM(CASE WHEN c.seconds_talk_time >= 120 THEN c.seconds_talk_time END), 0) AS total_talk_seg_2min
     FROM salesforce.five9_tabla_core_call_log AS c
     LEFT JOIN salesforce.tabla_core_user AS u
       ON c.agent = u.username AND u.sbf_grupo__c = 'Collection'
@@ -79,7 +88,7 @@ async function queryLlamadas(fd: string, fh: string): Promise<Five9Row[]> {
   `, params);
 
   return rows.map(r => ({
-    fecha:         String(r.fecha ?? "").substring(0, 10),
+    fecha:         toDateStr(r.fecha),
     hora:          Number(r.hora ?? 0),
     propietario:   String(r.propietario ?? r.agent ?? ""),
     loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
@@ -87,7 +96,8 @@ async function queryLlamadas(fd: string, fh: string): Promise<Five9Row[]> {
     llamadas2min:  Number(r.llamadas_2min   ?? 0),
     buzones:       Number(r.buzones         ?? 0),
     buzones40seg:  Number(r.buzones_40seg   ?? 0),
-    totalTalkSeg:  Number(r.total_talk_seg  ?? 0),
+    totalTalkSeg:     Number(r.total_talk_seg      ?? 0),
+    totalTalkSeg2min: Number(r.total_talk_seg_2min ?? 0),
   }));
 }
 
@@ -114,7 +124,7 @@ export async function getFive9Historico(
     const e = map.get(k) ?? {
       fecha: r.fecha, hora: r.hora, propietario: r.propietario,
       loginSeg: 0, onCallSeg: 0, notReadySeg: 0,
-      totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0,
+      totalLlamadas: 0, llamadas2min: 0, buzones: 0, buzones40seg: 0, totalTalkSeg: 0, totalTalkSeg2min: 0,
     };
     e.totalLlamadas += r.totalLlamadas;
     e.llamadas2min  += r.llamadas2min;

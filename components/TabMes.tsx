@@ -135,7 +135,7 @@ function TablaDias({ filas, onDetalleDia, onDetalleHora }: TablaDiasProps) {
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.totalLlamadas > 0 ? fmtPct(f.five9.llamadas2min / f.five9.totalLlamadas * 100) : "—"}</td>
-                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.totalLlamadas > 0 ? fmtSeg(Math.round(f.five9.totalTalkSeg / f.five9.totalLlamadas)) : "—"}</td>
+                  <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.llamadas2min > 0 ? fmtSeg(Math.round(f.five9.totalTalkSeg2min / f.five9.llamadas2min)) : "—"}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
                   <td style={{ textAlign: "right" }} className="col-f9">
                     {f.five9
@@ -161,7 +161,7 @@ function TablaDias({ filas, onDetalleDia, onDetalleHora }: TablaDiasProps) {
                     <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.totalLlamadas) : "—"}</td>
                     <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.llamadas2min) : "—"}</td>
                     <td style={{ textAlign: "right" }} className="col-f9">{h.five9 && h.five9.totalLlamadas > 0 ? fmtPct(h.five9.llamadas2min / h.five9.totalLlamadas * 100) : "—"}</td>
-                    <td style={{ textAlign: "right" }} className="col-f9">{h.five9 && h.five9.totalLlamadas > 0 ? fmtSeg(Math.round(h.five9.totalTalkSeg / h.five9.totalLlamadas)) : "—"}</td>
+                    <td style={{ textAlign: "right" }} className="col-f9">{h.five9 && h.five9.llamadas2min > 0 ? fmtSeg(Math.round(h.five9.totalTalkSeg2min / h.five9.llamadas2min)) : "—"}</td>
                     <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.buzones) : "—"}</td>
                     <td style={{ textAlign: "right" }} className="col-f9">{h.five9 ? fmtNum(h.five9.buzones40seg) : "—"}</td>
                     <td style={{ textAlign: "right" }} className="col-f9">{fmtSeg(h.five9?.onCallSeg)}</td>
@@ -238,7 +238,7 @@ function TablaPropietario({ filas, onDetalle }: TablaPropietarioProps) {
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.totalLlamadas) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.llamadas2min) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.totalLlamadas > 0 ? fmtPct(f.five9.llamadas2min / f.five9.totalLlamadas * 100) : "—"}</td>
-                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.totalLlamadas > 0 ? fmtSeg(Math.round(f.five9.totalTalkSeg / f.five9.totalLlamadas)) : "—"}</td>
+                <td style={{ textAlign: "right" }} className="col-f9">{f.five9 && f.five9.llamadas2min > 0 ? fmtSeg(Math.round(f.five9.totalTalkSeg2min / f.five9.llamadas2min)) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">{f.five9 ? fmtNum(f.five9.buzones) : "—"}</td>
                 <td style={{ textAlign: "right" }} className="col-f9">
                   {f.five9

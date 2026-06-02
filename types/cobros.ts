@@ -215,3 +215,30 @@ export interface FilaFive9Metricas {
   totalTalkSeg: number;
   totalTalkSeg2min: number;
 }
+
+// ─── Fact rows del caché de Redshift (nivel pago, sin agrupar) ─────────────────
+// Se calculan en el cron con `fecha` y `hora` ya resueltas por Redshift para
+// evitar bugs de timezone. Resumen/Mes agrupan y Detalle pagina sobre estas filas.
+
+export interface FactCobro {
+  fecha: string;        // YYYY-MM-DD (fecha_pago)
+  hora: number;         // hora de fecha_hora_cierre_real
+  propietario: string;
+  gestor: string;       // campo gestor (para reglas Cobranzas 2.0)
+  subTipo: string;      // sub_tipo_caso
+  numero: string;       // numero_caso
+  id: string;           // caseid
+  monto: number;        // payment_amount_usd
+  montoFactura: number; // total_amount_usd
+}
+
+export interface FactAdelanto {
+  fecha: string;        // YYYY-MM-DD (fecha_pago de la invoice/factura)
+  hora: number;         // hora de fecha_ultima_modificacion (ya en Bogotá en Redshift)
+  propietario: string;
+  tipo: string;         // 'Adelanto' | 'Upsell'
+  numero: string;       // acuerdo_nombre
+  id: string;           // acuerdo_id
+  monto: number;
+  montoFactura: number;
+}

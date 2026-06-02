@@ -7,13 +7,16 @@ import { runQuery } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { BASE_CTE } from "@/lib/filtros";
 import { corteHoy } from "@/lib/fecha";
-import type { FilaResumen, FilaFive9Metricas, ResultadoResumen } from "@/types/cobros";
+import type {
+  FilaResumen, FilaFive9Metricas, ResultadoResumen, FactCobro, FactAdelanto,
+} from "@/types/cobros";
 import {
   gestorWhereCobrosRS, gestorWhereAdelantosRS,
-  gestorEfectivoSF, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
+  gestorEfectivoSF, gestorEfectivoRS, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
 } from "@/lib/gestorFiltro";
 import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
+import { getResumenSnapshot } from "@/lib/cache";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -85,7 +88,7 @@ function merge(dest: Map<string, AggRaw>, rows: AggRaw[]) {
 
 // ─── Redshift: cobros agregados ───────────────────────────────────────────────
 
-async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
+async function rsCobroAggLive(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
   const params: Param[] = [fd, fh, corte];
   const extraWhere = gestorWhereCobrosRS(gestor);
   const rows = await runQuery(`
@@ -119,7 +122,7 @@ async function rsCobroAgg(fd: string, fh: string, corte: string, gestor?: string
 
 // ─── Redshift: adelantos agregados ───────────────────────────────────────────
 
-async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
+async function rsAdelAggLive(fd: string, fh: string, corte: string, gestor?: string): Promise<AggRaw[]> {
   const params: Param[] = [fd, fh, corte];
   // Adelantos son siempre Agente → excluir si se filtra por otro gestor
   const extraWhere = gestorWhereAdelantosRS(gestor);
@@ -155,6 +158,33 @@ async function rsAdelAgg(fd: string, fh: string, corte: string, gestor?: string)
     cashTotal:   Number(r.cash_total ?? 0),
     totalAmount: Number(r.total_amount ?? 0),
   }));
+}
+
+// ─── Agregación desde el caché (filas a nivel pago) ──────────────────────────
+// Devuelve una AggRaw por fila; merge() las suma por (hora, propietario).
+
+function cobrosFromCache(facts: FactCobro[], fd: string, fh: string, gestor?: string): AggRaw[] {
+  const out: AggRaw[] = [];
+  for (const f of facts) {
+    if (f.fecha < fd || f.fecha > fh) continue;
+    if (gestor) {
+      const gEfect = gestorEfectivoRS(f.subTipo, f.propietario, f.gestor);
+      if (!pasaFiltroGestorSF(gestor, gEfect)) continue;
+    }
+    out.push({ hora: f.hora, propietario: f.propietario, cant: 1, cashTotal: f.monto, totalAmount: f.montoFactura });
+  }
+  return out;
+}
+
+function adelantosFromCache(facts: FactAdelanto[], fd: string, fh: string, gestor?: string): AggRaw[] {
+  // Adelantos siempre Agente → si se filtra por otro gestor, nada aplica
+  if (!pasaFiltroGestorAdelantoSF(gestor)) return [];
+  const out: AggRaw[] = [];
+  for (const f of facts) {
+    if (f.fecha < fd || f.fecha > fh) continue;
+    out.push({ hora: f.hora, propietario: f.propietario, cant: 1, cashTotal: f.monto, totalAmount: f.montoFactura });
+  }
+  return out;
 }
 
 // ─── Salesforce: cobros de hoy agregados ──────────────────────────────────────
@@ -348,7 +378,7 @@ export async function getResumen(
   let sfError: string | undefined;
   let five9Error: string | undefined;
 
-  // SF cobros + adelantos de hoy
+  // SF cobros + adelantos de hoy (siempre en vivo)
   const sfP = sfActivo && incluyeHoy
     ? Promise.all([sfCobroAggHoy(gestor), sfAdelAggHoy(gestor)]).catch((e: any) => {
         sfError = String(e?.message ?? e);
@@ -356,22 +386,30 @@ export async function getResumen(
       })
     : Promise.resolve<[AggRaw[], AggRaw[]]>([[], []]);
 
-  // Five9 histórico (Redshift) + hoy (API) en paralelo
-  const f9HistP = f9Activo
-    ? getFive9Historico(fechaDesde, corte).catch(() => [] as Five9Row[])
-    : Promise.resolve<Five9Row[]>([]);
-
+  // Five9 de hoy (API) — siempre en vivo
   const f9HoyP = f9Activo && incluyeHoy
     ? getAgentNameMap()
         .then(nameMap => getFive9Hoy(corte, nameMap))
         .catch((e: any) => { five9Error = String(e?.message ?? e); return [] as Five9Row[]; })
     : Promise.resolve<Five9Row[]>([]);
 
-  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows], f9Hist, f9Hoy] = await Promise.all([
-    rsCobroAgg(fechaDesde, fechaHasta, corte, gestor),
-    rsAdelAgg(fechaDesde, fechaHasta, corte, gestor),
+  // Histórico (cobros + adelantos + Five9): caché-first, fallback en vivo
+  const snapshot = await getResumenSnapshot();
+  const histP: Promise<[AggRaw[], AggRaw[], Five9Row[]]> = snapshot
+    ? Promise.resolve([
+        cobrosFromCache(snapshot.cobros, fechaDesde, fechaHasta, gestor),
+        adelantosFromCache(snapshot.adelantos, fechaDesde, fechaHasta, gestor),
+        snapshot.five9.filter(r => r.fecha >= fechaDesde && r.fecha < corte),
+      ])
+    : Promise.all([
+        rsCobroAggLive(fechaDesde, fechaHasta, corte, gestor),
+        rsAdelAggLive(fechaDesde, fechaHasta, corte, gestor),
+        getFive9Historico(fechaDesde, corte).catch(() => [] as Five9Row[]),
+      ]);
+
+  const [[rsCobroRows, rsAdelRows, f9Hist], [sfCobroRows, sfAdelRows], f9Hoy] = await Promise.all([
+    histP,
     sfP,
-    f9HistP,
     f9HoyP,
   ]);
 

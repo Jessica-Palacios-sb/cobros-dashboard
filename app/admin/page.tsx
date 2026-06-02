@@ -26,6 +26,15 @@ const fmtFecha = (iso: string) =>
       })
     : "—";
 
+const fmtFechaHora = (iso: string) =>
+  iso
+    ? new Date(iso).toLocaleString("es-CO", {
+        timeZone: "America/Bogota",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "—";
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -33,6 +42,7 @@ export default function AdminPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [cargando, setCargando]   = useState(true);
   const [error, setError]         = useState("");
+  const [cacheUpdatedAt, setCacheUpdatedAt] = useState<string | null>(null);
 
   // Formulario nuevo usuario
   const [nuevoEmail,  setNuevoEmail]  = useState("");
@@ -76,7 +86,13 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (session?.user.rol === "admin") cargarUsuarios();
+    if (session?.user.rol === "admin") {
+      cargarUsuarios();
+      fetch("/api/admin/cache-status")
+        .then(r => r.ok ? r.json() : null)
+        .then(d => setCacheUpdatedAt(d?.updatedAt ?? null))
+        .catch(() => {});
+    }
   }, [session]);
 
   const patchUsuario = async (id: string, body: object) => {
@@ -202,6 +218,9 @@ export default function AdminPage() {
             <h2 style={{ margin: 0, fontWeight: 700, fontSize: 22 }}>Gestión de Usuarios</h2>
             <p style={{ margin: "4px 0 0", color: "#6b7280", fontSize: 13 }}>
               {usuarios.length} usuario{usuarios.length !== 1 ? "s" : ""} registrados
+            </p>
+            <p style={{ margin: "2px 0 0", color: "#6b7280", fontSize: 12 }}>
+              Datos Redshift actualizados: {cacheUpdatedAt ? fmtFechaHora(cacheUpdatedAt) : "—"}
             </p>
           </div>
           <div style={{ display: "flex", gap: 10 }}>

@@ -4,11 +4,12 @@ import { runQuery } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { BASE_CTE } from "@/lib/filtros";
 import { corteHoy } from "@/lib/fecha";
-import type { FilaDetalle, ResultadoDetalle } from "@/types/cobros";
+import type { FilaDetalle, ResultadoDetalle, FactCobro, FactAdelanto } from "@/types/cobros";
 import {
   gestorWhereCobrosRS, gestorWhereAdelantosRS,
-  gestorEfectivoSF, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
+  gestorEfectivoSF, gestorEfectivoRS, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
 } from "@/lib/gestorFiltro";
+import { getResumenSnapshot } from "@/lib/cache";
 export type { FilaDetalle, ResultadoDetalle };
 
 type Param = string | number | boolean | null;
@@ -53,7 +54,7 @@ WITH adelanto AS (
 
 // ─── Redshift: cobros individuales ───────────────────────────────────────────
 
-async function rsCobroDetalle(
+async function rsCobroDetalleLive(
   fd: string, fh: string, corte: string,
   hora?: number, propietario?: string, gestor?: string
 ): Promise<FilaDetalle[]> {
@@ -114,7 +115,7 @@ async function rsCobroDetalle(
 
 // ─── Redshift: adelantos individuales ────────────────────────────────────────
 
-async function rsAdelDetalle(
+async function rsAdelDetalleLive(
   fd: string, fh: string, corte: string,
   hora?: number, propietario?: string, gestor?: string
 ): Promise<FilaDetalle[]> {
@@ -174,6 +175,49 @@ async function rsAdelDetalle(
     montoFactura: Number(r.monto_factura ?? 0),
     origen:      "redshift" as const,
   }));
+}
+
+// ─── Detalle desde el caché (filas a nivel pago) ─────────────────────────────
+
+function cobrosDetalleFromCache(
+  facts: FactCobro[], fd: string, fh: string,
+  hora?: number, propietario?: string, gestor?: string
+): FilaDetalle[] {
+  const out: FilaDetalle[] = [];
+  for (const f of facts) {
+    if (f.fecha < fd || f.fecha > fh) continue;
+    if (hora !== undefined && f.hora !== hora) continue;
+    if (propietario !== undefined && f.propietario !== propietario) continue;
+    if (gestor) {
+      const gEfect = gestorEfectivoRS(f.subTipo, f.propietario, f.gestor);
+      if (!pasaFiltroGestorSF(gestor, gEfect)) continue;
+    }
+    out.push({
+      id: f.id, numero: f.numero, tipo: "Cobro", subTipo: f.subTipo,
+      hora: f.hora, propietario: f.propietario, fechaPago: f.fecha,
+      monto: f.monto, montoFactura: f.montoFactura, origen: "redshift",
+    });
+  }
+  return out;
+}
+
+function adelantosDetalleFromCache(
+  facts: FactAdelanto[], fd: string, fh: string,
+  hora?: number, propietario?: string, gestor?: string
+): FilaDetalle[] {
+  if (!pasaFiltroGestorAdelantoSF(gestor)) return [];
+  const out: FilaDetalle[] = [];
+  for (const f of facts) {
+    if (f.fecha < fd || f.fecha > fh) continue;
+    if (hora !== undefined && f.hora !== hora) continue;
+    if (propietario !== undefined && f.propietario !== propietario) continue;
+    out.push({
+      id: f.id, numero: f.numero, tipo: (f.tipo as "Adelanto" | "Upsell"), subTipo: f.tipo,
+      hora: f.hora, propietario: f.propietario, fechaPago: f.fecha,
+      monto: f.monto, montoFactura: f.montoFactura, origen: "redshift",
+    });
+  }
+  return out;
 }
 
 function getBogotaToday() {
@@ -365,9 +409,20 @@ export async function getResumenDetalle(
       })
     : Promise.resolve<[FilaDetalle[], FilaDetalle[]]>([[], []]);
 
-  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows]] = await Promise.all([
-    rsCobroDetalle(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
-    rsAdelDetalle(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
+  // Histórico (cobros + adelantos): caché-first, fallback en vivo
+  const snapshot = await getResumenSnapshot();
+  const histP: Promise<[FilaDetalle[], FilaDetalle[]]> = snapshot
+    ? Promise.resolve([
+        cobrosDetalleFromCache(snapshot.cobros, fechaDesde, fechaHasta, hora, propietario, gestor),
+        adelantosDetalleFromCache(snapshot.adelantos, fechaDesde, fechaHasta, hora, propietario, gestor),
+      ])
+    : Promise.all([
+        rsCobroDetalleLive(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
+        rsAdelDetalleLive(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
+      ]);
+
+  const [[rsCobroRows, rsAdelRows], [sfCobroRows, sfAdelRows]] = await Promise.all([
+    histP,
     sfP,
   ]);
 

@@ -7,11 +7,15 @@ import { BASE_CTE } from "@/lib/filtros";
 import { corteHoy } from "@/lib/fecha";
 import {
   gestorWhereCobrosRS, gestorWhereAdelantosRS,
-  gestorEfectivoSF, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
+  gestorEfectivoSF, gestorEfectivoRS, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
 } from "@/lib/gestorFiltro";
-import type { FilaDia, FilaHoraMes, FilaFive9Metricas, FilaResumen, ResultadoMes } from "@/types/cobros";
+import type {
+  FilaDia, FilaHoraMes, FilaFive9Metricas, FilaResumen, ResultadoMes,
+  FactCobro, FactAdelanto,
+} from "@/types/cobros";
 import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
+import { getResumenSnapshot } from "@/lib/cache";
 
 const CTE_ADL = `
 WITH adelanto AS (
@@ -78,7 +82,7 @@ function merge(dest: Map<string, MesRaw>, rows: MesRaw[]) {
 
 // ─── Redshift cobros ──────────────────────────────────────────────────────────
 
-async function rsCobroMes(
+async function rsCobroMesLive(
   fd: string, fh: string, corte: string,
   gestor?: string, subTipo?: string
 ): Promise<MesRaw[]> {
@@ -124,7 +128,7 @@ async function rsCobroMes(
 
 // ─── Redshift adelantos ───────────────────────────────────────────────────────
 
-async function rsAdelMes(
+async function rsAdelMesLive(
   fd: string, fh: string, corte: string,
   gestor?: string
 ): Promise<MesRaw[]> {
@@ -166,6 +170,33 @@ async function rsAdelMes(
     cashTotal:   Number(r.cash_total  ?? 0),
     totalAmount: Number(r.total_amount ?? 0),
   }));
+}
+
+// ─── Agregación desde el caché (filas a nivel pago) ──────────────────────────
+
+function cobrosMesFromCache(facts: FactCobro[], fd: string, fh: string, gestor?: string, subTipo?: string): MesRaw[] {
+  const out: MesRaw[] = [];
+  for (const f of facts) {
+    if (f.fecha < fd || f.fecha > fh) continue;
+    if (subTipo && f.subTipo !== subTipo) continue;
+    if (gestor) {
+      const gEfect = gestorEfectivoRS(f.subTipo, f.propietario, f.gestor);
+      if (!pasaFiltroGestorSF(gestor, gEfect)) continue;
+    }
+    out.push({ fecha: f.fecha, hora: f.hora, propietario: f.propietario, cant: 1, cashTotal: f.monto, totalAmount: f.montoFactura });
+  }
+  return out;
+}
+
+function adelantosMesFromCache(facts: FactAdelanto[], fd: string, fh: string, gestor?: string): MesRaw[] {
+  // Adelantos siempre Agente → si se filtra por otro gestor, nada aplica
+  if (!pasaFiltroGestorAdelantoSF(gestor)) return [];
+  const out: MesRaw[] = [];
+  for (const f of facts) {
+    if (f.fecha < fd || f.fecha > fh) continue;
+    out.push({ fecha: f.fecha, hora: f.hora, propietario: f.propietario, cant: 1, cashTotal: f.monto, totalAmount: f.montoFactura });
+  }
+  return out;
 }
 
 // ─── SF cobros de hoy ─────────────────────────────────────────────────────────
@@ -419,15 +450,7 @@ export async function getResumenMes(
 
   const f9Errors: string[] = [];
 
-  // Five9 histórico Redshift: desde inicio del mes hasta ayer (< corte)
-  const f9HistP = f9Activo
-    ? getFive9Historico(fechaDesde, corte).catch((e: any) => {
-        f9Errors.push(`Histórico: ${String(e?.message ?? e)}`);
-        return [] as Five9Row[];
-      })
-    : Promise.resolve<Five9Row[]>([]);
-
-  // Five9 API: solo hoy (cuando el mes actual está seleccionado)
+  // Five9 API: solo hoy (cuando el mes actual está seleccionado) — siempre en vivo
   const f9HoyP = f9Activo && incluyeHoy
     ? getAgentNameMap()
         .then(m => getFive9Hoy(corte, m))
@@ -437,11 +460,25 @@ export async function getResumenMes(
         })
     : Promise.resolve<Five9Row[]>([]);
 
-  const [rsCobroRows, rsAdelRows, [sfCobroRows, sfAdelRows], f9Hist, f9Hoy] = await Promise.all([
-    rsCobroMes(fechaDesde, rsHasta, corte, gestor, subTipo),
-    rsAdelMes(fechaDesde, rsHasta, corte, gestor),
+  // Histórico (cobros + adelantos + Five9): caché-first, fallback en vivo
+  const snapshot = await getResumenSnapshot();
+  const histP: Promise<[MesRaw[], MesRaw[], Five9Row[]]> = snapshot
+    ? Promise.resolve([
+        cobrosMesFromCache(snapshot.cobros, fechaDesde, rsHasta, gestor, subTipo),
+        adelantosMesFromCache(snapshot.adelantos, fechaDesde, rsHasta, gestor),
+        snapshot.five9.filter(r => r.fecha >= fechaDesde && r.fecha <= rsHasta),
+      ])
+    : Promise.all([
+        rsCobroMesLive(fechaDesde, rsHasta, corte, gestor, subTipo),
+        rsAdelMesLive(fechaDesde, rsHasta, corte, gestor),
+        getFive9Historico(fechaDesde, corte)
+          .then(rows => rows.filter(r => r.fecha >= fechaDesde && r.fecha <= rsHasta))
+          .catch((e: any) => { f9Errors.push(`Histórico: ${String(e?.message ?? e)}`); return [] as Five9Row[]; }),
+      ]);
+
+  const [[rsCobroRows, rsAdelRows, f9Hist], [sfCobroRows, sfAdelRows], f9Hoy] = await Promise.all([
+    histP,
     sfP,
-    f9HistP,
     f9HoyP,
   ]);
 

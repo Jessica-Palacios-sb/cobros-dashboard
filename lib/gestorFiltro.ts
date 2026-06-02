@@ -60,6 +60,23 @@ export function gestorEfectivoSF(
   return "Agente";
 }
 
+// ─── Filtro JS para filas cacheadas de Redshift ──────────────────────────────
+// Igual que gestorEfectivoSF pero a partir de sub_tipo_caso (no RecordTypeId).
+export function gestorEfectivoRS(
+  subTipo: string,
+  propietario: string,
+  gestorCampo: string
+): string {
+  if (subTipo === "Cobranzas") {
+    return propietario === "Cobranza Queue" ? "Automatico" : "Agente";
+  }
+  if (subTipo === "Cobranzas 2.0") {
+    return gestorCampo; // "Automatico", "Agente" o ""
+  }
+  // Adelanto de cuotas y otros → siempre Agente
+  return "Agente";
+}
+
 // Retorna true si el caso pasa el filtro de gestor.
 export function pasaFiltroGestorSF(
   gestor: string | undefined,

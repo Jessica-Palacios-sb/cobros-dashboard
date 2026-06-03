@@ -192,7 +192,7 @@ function adelantosFromCache(facts: FactAdelanto[], fd: string, fh: string, gesto
 async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
   const bogota = getBogotaToday();
   const [casos, invoices, facturas] = await Promise.all([
-    querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId, SBEEMO_LS_GESTOR__c
+    querySalesforce(`SELECT Id, ClosedDate, AccountId, Owner.Name, RecordTypeId, SBEEMO_LS_GESTOR__c, SBEEMO_RB_INVOICE__c
       FROM Case
       WHERE RecordTypeId IN ('0127V000000p7WyQAI','012UH0000018MqnYAE','012UH000009AltJYAS')
         AND ClosedDate >= ${bogota.startUtc}
@@ -214,12 +214,13 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
     ).catch(() => [] as FilaSF[]),
   ]);
 
-  const invByAccount = new Map<string, FilaSF>();
+  // Invoice ligado al caso (SBEEMO_RB_INVOICE__c), no por cuenta: evita que un
+  // caso tome el payment de otro invoice cuando la cuenta tiene varios pagados hoy.
+  const invById = new Map<string, FilaSF>();
   for (const inv of invoices) {
-    if (!inv.Zuora__Account__c) continue;
     if (Number(inv.SBEEMO_NU_NUMERO_INVOICE__c ?? 0) === 21 &&
         String((inv.Opportunity__r as FilaSF | undefined)?.SBEEMO_LS_TIPO_VENTA__c ?? "") === "Upgrade OPS") continue;
-    invByAccount.set(String(inv.Zuora__Account__c), inv);
+    if (inv.Id) invById.set(String(inv.Id), inv);
   }
 
   const facByCaso = new Map<string, FilaSF>();
@@ -227,7 +228,7 @@ async function sfCobroAggHoy(gestor?: string): Promise<AggRaw[]> {
 
   const out: AggRaw[] = [];
   for (const c of casos) {
-    const inv  = invByAccount.get(String(c.AccountId ?? ""));
+    const inv  = invById.get(String(c.SBEEMO_RB_INVOICE__c ?? ""));
     const fac  = facByCaso.get(String(c.Id ?? ""));
     const pago = inv
       ? Number(inv.SBEEMO_FM_PAYMENT_AMOUNT_USD__c ?? 0)

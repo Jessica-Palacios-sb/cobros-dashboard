@@ -16,6 +16,7 @@ import type {
 import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
+import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
 
 const CTE_ADL = `
 WITH adelanto AS (
@@ -418,9 +419,11 @@ export async function getResumenMes(
   mes: string,       // "YYYY-MM"
   gestor?: string,
   subTipo?: string,
+  equipo?: string,
 ): Promise<ResultadoMes> {
   const corte = corteHoy();
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
+  const equipoMapP = equipo ? getNombreEquipoMap() : Promise.resolve(null);
 
   const fechaDesde = `${mes}-01`;
   const [year, month] = mes.split("-").map(Number);
@@ -477,10 +480,11 @@ export async function getResumenMes(
           .catch((e: any) => { f9Errors.push(`Histórico: ${String(e?.message ?? e)}`); return [] as Five9Row[]; }),
       ]);
 
-  const [[rsCobroRows, rsAdelRows, f9Hist], [sfCobroRows, sfAdelRows], f9Hoy] = await Promise.all([
+  const [[rsCobroRows, rsAdelRows, f9Hist], [sfCobroRows, sfAdelRows], f9Hoy, equipoMap] = await Promise.all([
     histP,
     sfP,
     f9HoyP,
+    equipoMapP,
   ]);
 
   const combined = new Map<string, MesRaw>();
@@ -489,11 +493,16 @@ export async function getResumenMes(
   merge(combined, sfCobroRows);
   merge(combined, sfAdelRows);
 
+  // Filtro por equipo (sobre el propietario de cada fila ya fusionada)
+  if (equipo) {
+    for (const [k, r] of combined) if (!pasaEquipo(r.propietario, equipo, equipoMap)) combined.delete(k);
+  }
+
   const totalCant   = Array.from(combined.values()).reduce((s, r) => s + r.cant, 0);
   const totalCash   = Array.from(combined.values()).reduce((s, r) => s + r.cashTotal, 0);
   const totalAmount = Array.from(combined.values()).reduce((s, r) => s + r.totalAmount, 0);
 
-  const f9Maps = buildFive9MesMaps([...f9Hist, ...f9Hoy]);
+  const f9Maps = buildFive9MesMaps([...f9Hist, ...f9Hoy].filter(r => pasaEquipo(r.propietario, equipo, equipoMap)));
   const { porDia, porPropietario } = buildResult(combined, f9Maps);
 
   return {

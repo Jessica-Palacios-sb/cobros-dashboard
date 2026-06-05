@@ -92,6 +92,7 @@ export interface FiltrosCobros {
   fechaHasta?: string;    // YYYY-MM-DD
   gestor?: string[];
   subtipo?: string[];
+  equipo?: string;        // filtra por el equipo del propietario
   busqueda?: string;      // correo, ID de caso o número de caso
 }
 
@@ -128,6 +129,7 @@ export interface FiltrosAdelanto {
   fechaHasta?: string;
   tipo?: string[];       // 'Adelanto' | 'Upsell'
   propietario?: string[];
+  equipo?: string;       // filtra por el equipo del propietario
   busqueda?: string;     // correo o número de caso
 }
 

@@ -9,6 +9,7 @@ import { CasoCobro, FiltrosCobros } from "@/types/cobros";
 import TablaAdelantos from "@/components/TablaAdelantos";
 import TabResumen from "@/components/TabResumen";
 import TabMes from "@/components/TabMes";
+import { useEquipos } from "@/components/useEquipos";
 
 const PAGE_SIZE = 50;
 
@@ -44,6 +45,8 @@ export default function Dashboard() {
   const [fechaHasta, setFechaHasta] = useState(todayInit);
   const [gestor, setGestor] = useState("");
   const [subtipo, setSubtipo] = useState("");
+  const [equipo, setEquipo] = useState("");
+  const equipos = useEquipos();
   const [busqueda, setBusqueda] = useState("");
 
   const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosCobros>({
@@ -75,6 +78,7 @@ export default function Dashboard() {
       if (f.fechaDesde) q.set("fechaDesde", f.fechaDesde);
       if (f.fechaHasta) q.set("fechaHasta", f.fechaHasta);
       if (f.busqueda) q.set("busqueda", f.busqueda);
+      if (f.equipo) q.set("equipo", f.equipo);
       f.gestor?.forEach((g) => q.append("gestor", g));
       f.subtipo?.forEach((s) => q.append("subtipo", s));
       return q.toString();
@@ -126,9 +130,10 @@ export default function Dashboard() {
       fechaHasta: fh || undefined,
       gestor: gestor ? gestor.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
       subtipo: subtipo ? subtipo.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+      equipo: equipo || undefined,
       busqueda: busqueda || undefined,
     }),
-    [gestor, subtipo, busqueda]
+    [gestor, subtipo, equipo, busqueda]
   );
 
   const aplicarFiltros = () => {
@@ -156,6 +161,7 @@ export default function Dashboard() {
     setFechaHasta(today);
     setGestor("");
     setSubtipo("");
+    setEquipo("");
     setBusqueda("");
     setFiltrosAplicados({ fechaDesde: today, fechaHasta: today });
     setPage(1);
@@ -258,6 +264,15 @@ export default function Dashboard() {
               <option value="Cobranzas">Cobranzas</option>
               <option value="Cobranzas 2.0">Cobranzas 2.0</option>
               <option value="Adelanto de cuotas">Adelanto de cuotas</option>
+            </select>
+          </div>
+          <div className="campo">
+            <label>Equipo</label>
+            <select value={equipo} onChange={(e) => setEquipo(e.target.value)}>
+              <option value="">Todos</option>
+              {equipos.map((eq) => (
+                <option key={eq} value={eq}>{eq}</option>
+              ))}
             </select>
           </div>
           <div className="campo">

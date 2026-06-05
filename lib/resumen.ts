@@ -17,6 +17,7 @@ import {
 import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
+import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -369,12 +370,16 @@ function buildFive9Maps(rows: Five9Row[]): {
 export async function getResumen(
   fechaDesde: string,
   fechaHasta: string,
-  gestor?: string
+  gestor?: string,
+  equipo?: string
 ): Promise<ResultadoResumen> {
   const corte      = corteHoy();
   const sfActivo   = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
   const f9Activo   = !!(process.env.FIVE9_USERNAME && process.env.FIVE9_PASSWORD);
   const incluyeHoy = fechaHasta >= corte;
+
+  // Mapa propietario→equipo solo si se filtra por equipo
+  const equipoMapP = equipo ? getNombreEquipoMap() : Promise.resolve(null);
 
   let sfError: string | undefined;
   let five9Error: string | undefined;
@@ -408,10 +413,11 @@ export async function getResumen(
         getFive9Historico(fechaDesde, corte).catch(() => [] as Five9Row[]),
       ]);
 
-  const [[rsCobroRows, rsAdelRows, f9Hist], [sfCobroRows, sfAdelRows], f9Hoy] = await Promise.all([
+  const [[rsCobroRows, rsAdelRows, f9Hist], [sfCobroRows, sfAdelRows], f9Hoy, equipoMap] = await Promise.all([
     histP,
     sfP,
     f9HoyP,
+    equipoMapP,
   ]);
 
   // Cobros + adelantos
@@ -421,11 +427,16 @@ export async function getResumen(
   merge(combined, sfCobroRows);
   merge(combined, sfAdelRows);
 
+  // Filtro por equipo (sobre el propietario de cada fila ya fusionada)
+  if (equipo) {
+    for (const [k, r] of combined) if (!pasaEquipo(r.propietario, equipo, equipoMap)) combined.delete(k);
+  }
+
   const totalCant = Array.from(combined.values()).reduce((s, r) => s + r.cant, 0);
   const totalCash = Array.from(combined.values()).reduce((s, r) => s + r.cashTotal, 0);
 
-  // Five9: fusionar histórico + hoy y construir mapas por hora y propietario
-  const allF9 = [...f9Hist, ...f9Hoy];
+  // Five9: fusionar histórico + hoy (filtrando por equipo si aplica) y construir mapas
+  const allF9 = [...f9Hist, ...f9Hoy].filter(r => pasaEquipo(r.propietario, equipo, equipoMap));
   const { byHora: f9ByHora, byProp: f9ByProp } = buildFive9Maps(allF9);
 
   const porHora = toResumen(combined, r => String(r.hora), totalCant)

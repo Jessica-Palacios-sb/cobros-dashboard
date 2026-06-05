@@ -6,6 +6,7 @@ import { runQuery, type Fila } from "@/lib/redshift";
 import { querySalesforce, type FilaSF } from "@/lib/salesforce";
 import { corteHoy, fechaHaceNDias } from "@/lib/fecha";
 import { AcuerdoAdelanto, FiltrosAdelanto } from "@/types/cobros";
+import { getNombreEquipoMap } from "@/lib/equipo";
 
 // ─── CTE Redshift ─────────────────────────────────────────────────────────────
 
@@ -73,9 +74,19 @@ INNER JOIN adelanto AS a
 
 type Param = string | number | boolean | null;
 
-function buildWhere(f: FiltrosAdelanto): { sql: string; params: Param[] } {
+function buildWhere(f: FiltrosAdelanto, equipoNombres?: string[] | null): { sql: string; params: Param[] } {
   const params: Param[] = [];
   const cond: string[] = ["i.estado = 'Pagada'"];
+
+  // Filtro por equipo: propietarios (nombres) que pertenecen al equipo
+  if (equipoNombres) {
+    if (equipoNombres.length === 0) {
+      cond.push("1 = 0"); // equipo sin propietarios → ningún resultado
+    } else {
+      const ph = equipoNombres.map((n) => { params.push(n); return `$${params.length}`; });
+      cond.push(`a.propietario IN (${ph.join(",")})`);
+    }
+  }
 
   // Excluye hoy (los datos de hoy los trae SF)
   params.push(corteHoy());
@@ -279,15 +290,27 @@ export async function getAdelantos(
   pageSize: number
 ): Promise<ResultadoAdelantos> {
   const offset = (page - 1) * pageSize;
-  const { sql, params } = buildWhere(filtros);
+
+  // Filtro por equipo: nombres de propietarios que pertenecen al equipo
+  let equipoNombres: string[] | null = null;
+  let equipoSet: Set<string> | null = null;
+  if (filtros.equipo) {
+    const map = await getNombreEquipoMap();
+    equipoNombres = [...map.entries()].filter(([, eq]) => eq === filtros.equipo).map(([n]) => n);
+    equipoSet = new Set(equipoNombres);
+  }
+
+  const { sql, params } = buildWhere(filtros, equipoNombres);
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
 
   let sfError: string | undefined;
   const sfP = page === 1 && sfActivo
-    ? queryAdelantosHoy(filtros).catch((e: any) => {
-        sfError = String(e?.message ?? e);
-        return [] as AcuerdoAdelanto[];
-      })
+    ? queryAdelantosHoy(filtros)
+        .then((rows) => equipoSet ? rows.filter((r) => equipoSet!.has(r.propietario)) : rows)
+        .catch((e: any) => {
+          sfError = String(e?.message ?? e);
+          return [] as AcuerdoAdelanto[];
+        })
     : Promise.resolve<AcuerdoAdelanto[]>([]);
 
   const [sf, rows, countRows] = await Promise.all([
@@ -321,7 +344,15 @@ export async function getAdelantos(
 }
 
 export async function getAdelantosParaExport(filtros: FiltrosAdelanto): Promise<AcuerdoAdelanto[]> {
-  const { sql, params } = buildWhere(filtros);
+  let equipoNombres: string[] | null = null;
+  let equipoSet: Set<string> | null = null;
+  if (filtros.equipo) {
+    const map = await getNombreEquipoMap();
+    equipoNombres = [...map.entries()].filter(([, eq]) => eq === filtros.equipo).map(([n]) => n);
+    equipoSet = new Set(equipoNombres);
+  }
+
+  const { sql, params } = buildWhere(filtros, equipoNombres);
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
   const [sf, rows] = await Promise.all([
     sfActivo ? queryAdelantosHoy(filtros).catch(() => [] as AcuerdoAdelanto[]) : Promise.resolve<AcuerdoAdelanto[]>([]),
@@ -334,5 +365,6 @@ export async function getAdelantosParaExport(filtros: FiltrosAdelanto): Promise<
       params
     ),
   ]);
-  return [...sf, ...rows.map(mapRow)];
+  const sfFiltrado = equipoSet ? sf.filter((r) => equipoSet!.has(r.propietario)) : sf;
+  return [...sfFiltrado, ...rows.map(mapRow)];
 }

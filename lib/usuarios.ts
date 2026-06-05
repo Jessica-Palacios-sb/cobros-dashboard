@@ -11,6 +11,7 @@ export interface Usuario {
   rol: "admin" | "viewer";
   activo: boolean;
   mustChangePassword: boolean;
+  equipo: string;
   creadoEn: string;
 }
 
@@ -28,13 +29,18 @@ export async function initTabla(): Promise<void> {
                             CHECK (rol IN ('admin', 'viewer')),
       activo              BOOLEAN NOT NULL DEFAULT true,
       must_change_password BOOLEAN NOT NULL DEFAULT false,
+      equipo              VARCHAR(255) NOT NULL DEFAULT '',
       creado_en           TIMESTAMPTZ DEFAULT NOW()
     )
   `;
-  // Migración idempotente: agrega la columna si la tabla ya existía sin ella
+  // Migraciones idempotentes: agregan columnas si la tabla ya existía sin ellas
   await sql`
     ALTER TABLE usuarios
       ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false
+  `;
+  await sql`
+    ALTER TABLE usuarios
+      ADD COLUMN IF NOT EXISTS equipo VARCHAR(255) NOT NULL DEFAULT ''
   `;
 }
 
@@ -47,12 +53,12 @@ export async function tablaVacia(): Promise<boolean> {
 export async function getUserByEmail(email: string): Promise<UsuarioConHash | null> {
   const sql = getDb();
   const rows = await sql`
-    SELECT id, email, nombre, rol, activo, must_change_password, password_hash
+    SELECT id, email, nombre, rol, activo, must_change_password, equipo, password_hash
     FROM usuarios WHERE email = ${email.toLowerCase()} LIMIT 1
   `;
   if (!rows[0]) return null;
   const r = rows[0] as any;
-  return { ...r, id: String(r.id), mustChangePassword: r.must_change_password ?? false } as UsuarioConHash;
+  return { ...r, id: String(r.id), mustChangePassword: r.must_change_password ?? false, equipo: r.equipo ?? "" } as UsuarioConHash;
 }
 
 export async function verifyUser(email: string, password: string): Promise<Usuario | null> {
@@ -66,10 +72,11 @@ export async function verifyUser(email: string, password: string): Promise<Usuar
 
 export async function listUsers(): Promise<Usuario[]> {
   const sql = getDb();
-  // Ejecuta la migración en el primer acceso post-deploy
+  // Ejecuta las migraciones en el primer acceso post-deploy
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS equipo VARCHAR(255) NOT NULL DEFAULT ''`.catch(() => {});
   const rows = await sql`
-    SELECT id, email, nombre, rol, activo, must_change_password, creado_en
+    SELECT id, email, nombre, rol, activo, must_change_password, equipo, creado_en
     FROM usuarios ORDER BY nombre
   `;
   return (rows as any[]).map((r) => ({
@@ -79,8 +86,41 @@ export async function listUsers(): Promise<Usuario[]> {
     rol:                r.rol,
     activo:             r.activo,
     mustChangePassword: r.must_change_password ?? false,
+    equipo:             r.equipo ?? "",
     creadoEn:           r.creado_en ? new Date(r.creado_en).toISOString() : "",
   }));
+}
+
+/** Lista de equipos distintos (no vacíos) para poblar los filtros. */
+export async function getEquipos(): Promise<string[]> {
+  const sql = getDb();
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS equipo VARCHAR(255) NOT NULL DEFAULT ''`.catch(() => {});
+  const rows = await sql`
+    SELECT DISTINCT equipo FROM usuarios
+    WHERE equipo IS NOT NULL AND equipo <> ''
+    ORDER BY equipo
+  `;
+  return (rows as any[]).map((r) => String(r.equipo));
+}
+
+/** Mapa email(minúsculas) → equipo, fuente de verdad para el filtro de equipo. */
+export async function getEquipoPorEmail(): Promise<Map<string, string>> {
+  const sql = getDb();
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS equipo VARCHAR(255) NOT NULL DEFAULT ''`.catch(() => {});
+  const rows = await sql`
+    SELECT email, equipo FROM usuarios
+    WHERE equipo IS NOT NULL AND equipo <> ''
+  `;
+  const map = new Map<string, string>();
+  for (const r of rows as any[]) {
+    if (r.email) map.set(String(r.email).toLowerCase(), String(r.equipo));
+  }
+  return map;
+}
+
+export async function setEquipo(id: string, equipo: string): Promise<void> {
+  const sql = getDb();
+  await sql`UPDATE usuarios SET equipo = ${equipo} WHERE id = ${Number(id)}`;
 }
 
 export async function setRol(id: string, rol: "admin" | "viewer"): Promise<void> {
@@ -93,17 +133,18 @@ export async function createUser(
   nombre: string,
   password: string,
   rol: "admin" | "viewer",
-  mustChangePassword = false
+  mustChangePassword = false,
+  equipo = ""
 ): Promise<Usuario> {
   const sql = getDb();
   const hash = await bcrypt.hash(password, 12);
   const rows = await sql`
-    INSERT INTO usuarios (email, nombre, password_hash, rol, activo, must_change_password)
-    VALUES (${email.toLowerCase()}, ${nombre}, ${hash}, ${rol}, true, ${mustChangePassword})
-    RETURNING id, email, nombre, rol, activo, must_change_password
+    INSERT INTO usuarios (email, nombre, password_hash, rol, activo, must_change_password, equipo)
+    VALUES (${email.toLowerCase()}, ${nombre}, ${hash}, ${rol}, true, ${mustChangePassword}, ${equipo})
+    RETURNING id, email, nombre, rol, activo, must_change_password, equipo
   `;
   const r = rows[0] as any;
-  return { ...r, id: String(r.id), mustChangePassword: r.must_change_password ?? false, creadoEn: "" } as Usuario;
+  return { ...r, id: String(r.id), mustChangePassword: r.must_change_password ?? false, equipo: r.equipo ?? "", creadoEn: "" } as Usuario;
 }
 
 export async function changePassword(id: string, newPassword: string): Promise<void> {

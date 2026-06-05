@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import type { FilaDia, FilaResumen, ResultadoMes } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
+import { useEquipos } from "@/components/useEquipos";
 
 const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const fmtNum = (n: number) => n.toLocaleString("es-CO");
@@ -282,18 +283,21 @@ export default function TabMes() {
   const [mes, setMes]       = useState(meses[0].value);
   const [gestor, setGestor] = useState("");
   const [subTipo, setSubTipo] = useState("");
+  const [equipo, setEquipo] = useState("");
+  const equipos = useEquipos();
   const [datos, setDatos]   = useState<ResultadoMes | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError]   = useState("");
   const [modal, setModal]   = useState<ModalMesState | null>(null);
 
-  const cargar = useCallback(async (m: string, gest?: string, st?: string) => {
+  const cargar = useCallback(async (m: string, gest?: string, st?: string, eq?: string) => {
     setCargando(true);
     setError("");
     try {
       const q = new URLSearchParams({ mes: m });
       if (gest)  q.set("gestor",  gest);
       if (st)    q.set("subTipo", st);
+      if (eq)    q.set("equipo",  eq);
       const res = await fetch(`/api/resumen/mes?${q}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -318,7 +322,7 @@ export default function TabMes() {
     cargar(meses[0].value, undefined, undefined);
   }, [cargar]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const aplicar = () => cargar(mes, gestor || undefined, subTipo || undefined);
+  const aplicar = () => cargar(mes, gestor || undefined, subTipo || undefined, equipo || undefined);
 
   return (
     <div>
@@ -353,6 +357,16 @@ export default function TabMes() {
             <option value="Cobranzas">Cobranzas</option>
             <option value="Cobranzas 2.0">Cobranzas 2.0</option>
             <option value="Adelanto de cuotas">Adelanto de cuotas</option>
+          </select>
+        </div>
+
+        <div className="campo">
+          <label>Equipo</label>
+          <select value={equipo} onChange={e => setEquipo(e.target.value)}>
+            <option value="">Todos</option>
+            {equipos.map(eq => (
+              <option key={eq} value={eq}>{eq}</option>
+            ))}
           </select>
         </div>
 
@@ -424,6 +438,7 @@ export default function TabMes() {
           hora={modal.hora}
           propietario={modal.propietario}
           gestor={gestor || undefined}
+          equipo={equipo || undefined}
           onClose={() => setModal(null)}
         />
       )}

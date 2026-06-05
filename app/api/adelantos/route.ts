@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     fechaHasta:  sp.get("fechaHasta")  || undefined,
     tipo:        sp.getAll("tipo").filter(Boolean),
     propietario: sp.getAll("propietario").filter(Boolean),
+    equipo:      sp.get("equipo")      || undefined,
     busqueda:    sp.get("busqueda")    || undefined,
   };
 

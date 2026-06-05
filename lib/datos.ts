@@ -8,6 +8,7 @@ import { whereRedshift, whereSOQL, TABLE, BASE_CTE } from "@/lib/filtros";
 import { COLUMNAS, FiltrosCobros, CasoCobro } from "@/types/cobros";
 import { getRedshiftCache } from "@/lib/cache";
 import { corteHoy, fechaHaceNDias } from "@/lib/fecha";
+import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
 
 // ─── Constantes Salesforce ────────────────────────────────────────────────────
 
@@ -193,7 +194,11 @@ async function querySalesforceCasos(filtros: FiltrosCobros): Promise<CasoCobro[]
 /**
  * Filtra la data de Redshift en memoria replicando la lógica de whereRedshift.
  */
-function filterRedshiftData(data: CasoCobro[], filtros: FiltrosCobros): CasoCobro[] {
+function filterRedshiftData(
+  data: CasoCobro[],
+  filtros: FiltrosCobros,
+  equipoMap: Map<string, string> | null = null
+): CasoCobro[] {
   const hoy = corteHoy();
 
   // Fecha desde efectiva: si hay búsqueda pero no fecha desde, acotar a 30 días
@@ -213,6 +218,9 @@ function filterRedshiftData(data: CasoCobro[], filtros: FiltrosCobros): CasoCobr
 
     // 4. Subtipos
     if (filtros.subtipo?.length && !filtros.subtipo.includes(c.subTipoCaso)) return false;
+
+    // 4b. Equipo (del propietario)
+    if (filtros.equipo && !pasaEquipo(c.propietario, filtros.equipo, equipoMap)) return false;
 
     // 5. Búsqueda (Case Insensitive)
     if (filtros.busqueda) {
@@ -253,8 +261,15 @@ export async function getCasos(
 
   // Redshift: Leer de la caché y filtrar en memoria
   const cacheP = getRedshiftCache();
+  // Mapa propietario→equipo solo si se filtra por equipo
+  const equipoMapP = filtros.equipo ? getNombreEquipoMap() : Promise.resolve(null);
 
-  const [sf, cachedData] = await Promise.all([sfP, cacheP]);
+  const [sfRaw, cachedData, equipoMap] = await Promise.all([sfP, cacheP, equipoMapP]);
+
+  // Salesforce de hoy: filtrar por equipo si aplica
+  const sf = filtros.equipo
+    ? sfRaw.filter((c) => pasaEquipo(c.propietario, filtros.equipo, equipoMap))
+    : sfRaw;
 
   // Si no hay caché, caemos al método lento (runQuery) para no dejar la app vacía
   let hist: CasoCobro[] = [];
@@ -266,16 +281,17 @@ export async function getCasos(
       w.params
     );
     hist = raw.map(mapRedshift);
+    if (filtros.equipo) hist = hist.filter((c) => pasaEquipo(c.propietario, filtros.equipo, equipoMap));
   } else {
     // Filtrar todo el snapshot en memoria y paginar
-    const filtered = filterRedshiftData(cachedData, filtros);
+    const filtered = filterRedshiftData(cachedData, filtros, equipoMap);
     hist = filtered.slice((page - 1) * pageSize, page * pageSize);
   }
 
   // Para el total histórico, si hay caché usamos el length del filtro, si no, query de count
   let totalHistorico = 0;
   if (cachedData) {
-    totalHistorico = filterRedshiftData(cachedData, filtros).length;
+    totalHistorico = filterRedshiftData(cachedData, filtros, equipoMap).length;
   } else {
     const w = whereRedshift(filtros);
     const countRes = await runQuery(`${BASE_CTE} SELECT COUNT(*) AS total FROM ${TABLE} WHERE ${w.sql}`, w.params);
@@ -294,7 +310,8 @@ export async function getCasos(
 
 export async function getCasosParaExport(filtros: FiltrosCobros): Promise<CasoCobro[]> {
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
-  const cachedData = await getRedshiftCache();
+  const equipoMapP = filtros.equipo ? getNombreEquipoMap() : Promise.resolve(null);
+  const [cachedData, equipoMap] = await Promise.all([getRedshiftCache(), equipoMapP]);
 
   const sfP = sfActivo
     ? querySalesforceCasos(filtros).catch(() => [] as CasoCobro[])
@@ -308,11 +325,13 @@ export async function getCasosParaExport(filtros: FiltrosCobros): Promise<CasoCo
       w.params
     );
     hist = raw.map(mapRedshift);
+    if (filtros.equipo) hist = hist.filter((c) => pasaEquipo(c.propietario, filtros.equipo, equipoMap));
   } else {
-    hist = filterRedshiftData(cachedData, filtros);
+    hist = filterRedshiftData(cachedData, filtros, equipoMap);
   }
 
-  const [sf] = await Promise.all([sfP]);
+  let [sf] = await Promise.all([sfP]);
+  if (filtros.equipo) sf = sf.filter((c) => pasaEquipo(c.propietario, filtros.equipo, equipoMap));
   return [...sf, ...hist];
 }
 

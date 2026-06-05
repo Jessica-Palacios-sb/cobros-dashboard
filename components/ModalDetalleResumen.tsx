@@ -27,6 +27,7 @@ interface Props {
   hora?: number;
   propietario?: string;
   gestor?: string;
+  equipo?: string;
   onClose: () => void;
 }
 
@@ -54,7 +55,7 @@ function descargarCSV(filas: FilaDetalle[], titulo: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, hora, propietario, gestor, onClose }: Props) {
+export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, hora, propietario, gestor, equipo, onClose }: Props) {
   const [filas, setFilas]     = useState<FilaDetalle[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError]     = useState("");
@@ -68,6 +69,7 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
     if (hora !== undefined) q.set("hora", String(hora));
     if (propietario)        q.set("propietario", propietario);
     if (gestor)             q.set("gestor", gestor);
+    if (equipo)             q.set("equipo", equipo);
 
     fetch(`/api/resumen/detalle?${q}`, { signal: ctrl.signal })
       .then(async (res) => {
@@ -88,7 +90,7 @@ export default function ModalDetalleResumen({ titulo, fechaDesde, fechaHasta, ho
       .finally(() => setCargando(false));
 
     return () => ctrl.abort();
-  }, [fechaDesde, fechaHasta, hora, propietario, gestor]);
+  }, [fechaDesde, fechaHasta, hora, propietario, gestor, equipo]);
 
   // Cerrar con Escape
   useEffect(() => {

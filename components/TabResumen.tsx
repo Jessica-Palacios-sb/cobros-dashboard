@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import type { FilaResumen, ResultadoResumen } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
+import { useEquipos } from "@/components/useEquipos";
 
 function hoyBogota() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
@@ -186,21 +187,24 @@ export default function TabResumen() {
   const [fechaDesde, setFechaDesde] = useState(hoyBogota());
   const [fechaHasta, setFechaHasta] = useState(hoyBogota());
   const [gestor, setGestor] = useState("");
+  const [equipo, setEquipo] = useState("");
+  const equipos = useEquipos();
   const [datos, setDatos] = useState<ResultadoResumen | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
-  const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string; gestor?: string }>({ fd: hoyBogota(), fh: hoyBogota() });
+  const [rangoActivo, setRangoActivo] = useState<{ fd: string; fh: string; gestor?: string; equipo?: string }>({ fd: hoyBogota(), fh: hoyBogota() });
   const [modal, setModal] = useState<ModalState | null>(null);
   const { data: session } = useSession();
 
 
-  const cargar = useCallback(async (fd: string, fh: string, gest?: string) => {
-    setRangoActivo({ fd, fh, gestor: gest });
+  const cargar = useCallback(async (fd: string, fh: string, gest?: string, eq?: string) => {
+    setRangoActivo({ fd, fh, gestor: gest, equipo: eq });
     setCargando(true);
     setError("");
     try {
       const q = new URLSearchParams({ fechaDesde: fd, fechaHasta: fh });
       if (gest) q.set("gestor", gest);
+      if (eq) q.set("equipo", eq);
       const res = await fetch(`/api/resumen?${q}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -219,19 +223,19 @@ export default function TabResumen() {
 
   useEffect(() => {
     const [fd, fh] = rango("hoy", fechaDesde, fechaHasta);
-    cargar(fd, fh, gestor || undefined);
+    cargar(fd, fh, gestor || undefined, equipo || undefined);
   }, [cargar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aplicar = () => {
     const [fd, fh] = rango(periodo, fechaDesde, fechaHasta);
-    cargar(fd, fh, gestor || undefined);
+    cargar(fd, fh, gestor || undefined, equipo || undefined);
   };
 
   const handlePeriodo = (p: Periodo) => {
     setPeriodo(p);
     if (p !== "custom") {
       const [fd, fh] = rango(p, fechaDesde, fechaHasta);
-      cargar(fd, fh, gestor || undefined);
+      cargar(fd, fh, gestor || undefined, equipo || undefined);
     }
   };
 
@@ -287,6 +291,16 @@ export default function TabResumen() {
             <option value="__null__">null</option>
             <option value="Automatico">Automatico</option>
             <option value="Agente">Agente</option>
+          </select>
+        </div>
+
+        <div className="campo">
+          <label>Equipo</label>
+          <select value={equipo} onChange={(e) => setEquipo(e.target.value)}>
+            <option value="">Todos</option>
+            {equipos.map((eq) => (
+              <option key={eq} value={eq}>{eq}</option>
+            ))}
           </select>
         </div>
 
@@ -363,6 +377,7 @@ export default function TabResumen() {
           hora={modal.hora}
           propietario={modal.propietario}
           gestor={rangoActivo.gestor}
+          equipo={rangoActivo.equipo}
           onClose={() => setModal(null)}
         />
       )}

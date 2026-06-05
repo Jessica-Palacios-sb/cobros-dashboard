@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateRangePicker from "@/components/DateRangePicker";
 import { AcuerdoAdelanto, FiltrosAdelanto } from "@/types/cobros";
+import { useEquipos } from "@/components/useEquipos";
 
 const PAGE_SIZE = 50;
 const SF_BASE   = "https://smartbeemo.lightning.force.com/";
@@ -29,6 +30,8 @@ export default function TablaAdelantos() {
   const [fechaHasta, setFechaHasta]   = useState(todayInit);
   const [tipo, setTipo]               = useState("");
   const [propietario, setPropietario] = useState("");
+  const [equipo, setEquipo]           = useState("");
+  const equipos = useEquipos();
   const [busqueda, setBusqueda]       = useState("");
   const [filtrosAplicados, setFiltrosAplicados] = useState<FiltrosAdelanto>({
     fechaDesde: todayInit,
@@ -52,6 +55,7 @@ export default function TablaAdelantos() {
     if (f.fechaDesde)   q.set("fechaDesde", f.fechaDesde);
     if (f.fechaHasta)   q.set("fechaHasta", f.fechaHasta);
     if (f.busqueda)     q.set("busqueda", f.busqueda);
+    if (f.equipo)       q.set("equipo", f.equipo);
     f.tipo?.forEach((t) => q.append("tipo", t));
     f.propietario?.forEach((p) => q.append("propietario", p));
     return q.toString();
@@ -92,8 +96,9 @@ export default function TablaAdelantos() {
     fechaHasta:  fh || undefined,
     tipo:        tipo ? [tipo] : undefined,
     propietario: propietario ? propietario.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+    equipo:      equipo || undefined,
     busqueda:    busqueda || undefined,
-  }), [tipo, propietario, busqueda]);
+  }), [tipo, propietario, equipo, busqueda]);
 
   const aplicar = () => {
     const f = buildFiltros(fechaDesde, fechaHasta);
@@ -114,7 +119,7 @@ export default function TablaAdelantos() {
   const limpiar = () => {
     const today = hoyBogota();
     setFechaDesde(today); setFechaHasta(today);
-    setTipo(""); setPropietario(""); setBusqueda("");
+    setTipo(""); setPropietario(""); setEquipo(""); setBusqueda("");
     const f = { fechaDesde: today, fechaHasta: today };
     setFiltrosAplicados(f);
     setPage(1);
@@ -155,6 +160,15 @@ export default function TablaAdelantos() {
             value={propietario}
             onChange={(e) => setPropietario(e.target.value)}
           />
+        </div>
+        <div className="campo">
+          <label>Equipo</label>
+          <select value={equipo} onChange={(e) => setEquipo(e.target.value)}>
+            <option value="">Todos</option>
+            {equipos.map((eq) => (
+              <option key={eq} value={eq}>{eq}</option>
+            ))}
+          </select>
         </div>
         <div className="campo">
           <label>Buscar (correo / # caso)</label>

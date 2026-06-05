@@ -10,10 +10,11 @@ interface Usuario {
   nombre: string;
   rol: "admin" | "viewer";
   activo: boolean;
+  equipo: string;
   creadoEn: string;
 }
 
-interface FilaExcel { nombre: string; email: string; }
+interface FilaExcel { nombre: string; email: string; equipo: string; }
 
 const PASS_MIN = 8;
 
@@ -106,6 +107,10 @@ export default function AdminPage() {
 
   const cambiarRol = (u: Usuario, rol: "admin" | "viewer") => patchUsuario(u.id, { rol });
   const toggleActivo = (u: Usuario) => patchUsuario(u.id, { activo: !u.activo });
+  const guardarEquipo = (u: Usuario, value: string) => {
+    if (value.trim() === (u.equipo ?? "")) return;
+    patchUsuario(u.id, { equipo: value.trim() });
+  };
 
   const eliminar = async (u: Usuario) => {
     if (!confirm(`¿Eliminar a ${u.nombre}? Esta acción no se puede deshacer.`)) return;
@@ -166,7 +171,12 @@ export default function AdminPage() {
         const keys = Object.keys(r);
         const nk = keys.find(k => /nombre/i.test(k)) ?? keys[0] ?? "";
         const ek = keys.find(k => /email|correo/i.test(k)) ?? keys[1] ?? "";
-        return { nombre: String(r[nk] ?? "").trim(), email: String(r[ek] ?? "").trim().toLowerCase() };
+        const qk = keys.find(k => /equipo/i.test(k)) ?? "";
+        return {
+          nombre: String(r[nk] ?? "").trim(),
+          email:  String(r[ek] ?? "").trim().toLowerCase(),
+          equipo: String((qk && r[qk]) ?? "").trim(),
+        };
       }).filter(r => r.nombre && r.email && r.email.includes("@"));
       setBulkResultados([]);
       setFilasExcel(parsed);
@@ -253,6 +263,7 @@ export default function AdminPage() {
                 <tr>
                   <th>Nombre</th>
                   <th>Email</th>
+                  <th>Equipo</th>
                   <th>Rol</th>
                   <th>Estado</th>
                   <th>Fecha registro</th>
@@ -262,7 +273,7 @@ export default function AdminPage() {
               <tbody>
                 {cargando ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: "center", padding: 32 }}>
+                    <td colSpan={7} style={{ textAlign: "center", padding: 32 }}>
                       <span className="spinner" /> Cargando…
                     </td>
                   </tr>
@@ -276,6 +287,20 @@ export default function AdminPage() {
 
                         {/* Email */}
                         <td className="mono" style={{ color: "#6b7280" }}>{u.email}</td>
+
+                        {/* Equipo — input inline editable (guarda al salir / Enter) */}
+                        <td>
+                          <input
+                            defaultValue={u.equipo ?? ""}
+                            placeholder="—"
+                            onBlur={(e) => guardarEquipo(u, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                            style={{
+                              padding: "3px 8px", borderRadius: 6, border: "1.5px solid #d1d5db",
+                              fontSize: 12, width: 120,
+                            }}
+                          />
+                        </td>
 
                         {/* Rol — dropdown inline (deshabilitado para uno mismo) */}
                         <td>
@@ -450,7 +475,7 @@ export default function AdminPage() {
                   <div className="tabla-scroll">
                     <table style={{ fontSize: 13 }}>
                       <thead>
-                        <tr><th>#</th><th>Nombre</th><th>Email</th></tr>
+                        <tr><th>#</th><th>Nombre</th><th>Email</th><th>Equipo</th></tr>
                       </thead>
                       <tbody>
                         {filasExcel.map((f, i) => (
@@ -458,6 +483,7 @@ export default function AdminPage() {
                             <td style={{ color: "#6b7280" }}>{i + 1}</td>
                             <td>{f.nombre}</td>
                             <td className="mono" style={{ color: "#6b7280" }}>{f.email}</td>
+                            <td>{f.equipo || <span style={{ color: "#6b7280" }}>—</span>}</td>
                           </tr>
                         ))}
                       </tbody>

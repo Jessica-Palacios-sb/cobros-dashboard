@@ -13,12 +13,13 @@ export async function GET(req: NextRequest) {
   const mes     = sp.get("mes") ?? "";
   const gestor  = sp.get("gestor") || undefined;
   const subTipo = sp.get("subTipo") || undefined;
+  const equipo  = sp.get("equipo") || undefined;
 
   if (!/^\d{4}-\d{2}$/.test(mes))
     return NextResponse.json({ error: "Parámetro mes inválido (YYYY-MM)" }, { status: 400 });
 
   try {
-    const resultado = await getResumenMes(mes, gestor, subTipo);
+    const resultado = await getResumenMes(mes, gestor, subTipo, equipo);
     return NextResponse.json(resultado);
   } catch (e: any) {
     console.error("Error en /api/resumen/mes:", e);

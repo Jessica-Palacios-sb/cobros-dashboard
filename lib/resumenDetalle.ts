@@ -10,6 +10,7 @@ import {
   gestorEfectivoSF, gestorEfectivoRS, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
 } from "@/lib/gestorFiltro";
 import { getResumenSnapshot } from "@/lib/cache";
+import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
 export type { FilaDetalle, ResultadoDetalle };
 
 type Param = string | number | boolean | null;
@@ -392,11 +393,13 @@ export async function getResumenDetalle(
   fechaHasta: string,
   hora?: number,
   propietario?: string,
-  gestor?: string
+  gestor?: string,
+  equipo?: string
 ): Promise<ResultadoDetalle> {
   const corte    = corteHoy();
   const sfActivo = !!(process.env.SF_USERNAME && process.env.SF_PASSWORD && process.env.SF_SECURITY_TOKEN);
   const incluyeHoy = fechaHasta >= corte;
+  const equipoMapP = equipo ? getNombreEquipoMap() : Promise.resolve(null);
 
   let sfError: string | undefined;
 
@@ -422,17 +425,20 @@ export async function getResumenDetalle(
         rsAdelDetalleLive(fechaDesde, fechaHasta, corte, hora, propietario, gestor),
       ]);
 
-  const [[rsCobroRows, rsAdelRows], [sfCobroRows, sfAdelRows]] = await Promise.all([
+  const [[rsCobroRows, rsAdelRows], [sfCobroRows, sfAdelRows], equipoMap] = await Promise.all([
     histP,
     sfP,
+    equipoMapP,
   ]);
 
-  const filas = [...rsCobroRows, ...rsAdelRows, ...sfCobroRows, ...sfAdelRows]
+  let filas = [...rsCobroRows, ...rsAdelRows, ...sfCobroRows, ...sfAdelRows]
     .sort((a, b) => {
       if (b.fechaPago > a.fechaPago) return 1;
       if (b.fechaPago < a.fechaPago) return -1;
       return b.hora - a.hora;
     });
+
+  if (equipo) filas = filas.filter(f => pasaEquipo(f.propietario, equipo, equipoMap));
 
   return { filas, sfError };
 }

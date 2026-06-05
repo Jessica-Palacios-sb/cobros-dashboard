@@ -17,10 +17,10 @@ export async function POST(req: NextRequest) {
   }
 
   const resultados = await Promise.all(
-    body.map(async ({ nombre, email }: { nombre: string; email: string }) => {
+    body.map(async ({ nombre, email, equipo }: { nombre: string; email: string; equipo?: string }) => {
       if (!nombre || !email) return { email, ok: false, error: "Nombre o email vacío" };
       try {
-        await createUser(email.trim().toLowerCase(), nombre.trim(), CLAVE_GENERICA, "viewer", true);
+        await createUser(email.trim().toLowerCase(), nombre.trim(), CLAVE_GENERICA, "viewer", true, (equipo ?? "").trim());
         return { email, ok: true };
       } catch (e: any) {
         const msg = e.message?.includes("duplicate") ? "Correo ya existe" : e.message;

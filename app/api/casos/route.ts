@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     fechaHasta: sp.get("fechaHasta") || undefined,
     gestor: sp.getAll("gestor"),
     subtipo: sp.getAll("subtipo"),
+    equipo: sp.get("equipo") || undefined,
     busqueda: sp.get("busqueda") || undefined,
   };
 

@@ -2,7 +2,7 @@
 // DELETE /api/admin/usuarios/[id] → elimina el usuario
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { setActivo, setRol, resetPassword, deleteUser } from "@/lib/usuarios";
+import { setActivo, setRol, resetPassword, deleteUser, setEquipo } from "@/lib/usuarios";
 
 export const runtime = "nodejs";
 
@@ -30,6 +30,10 @@ export async function PATCH(
     }
     if (body.rol === "admin" || body.rol === "viewer") {
       await setRol(id, body.rol);
+      return NextResponse.json({ ok: true });
+    }
+    if (typeof body.equipo === "string") {
+      await setEquipo(id, body.equipo.trim());
       return NextResponse.json({ ok: true });
     }
     if (body.password) {

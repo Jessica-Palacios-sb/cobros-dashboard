@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateRangePicker from "@/components/DateRangePicker";
 import { AcuerdoAdelanto, FiltrosAdelanto } from "@/types/cobros";
 import { useEquipos } from "@/components/useEquipos";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 const PAGE_SIZE = 50;
 const SF_BASE   = "https://smartbeemo.lightning.force.com/";
@@ -128,6 +129,9 @@ export default function TablaAdelantos() {
 
   const irPagina = (pg: number) => { setPage(pg); cargar(filtrosAplicados, pg); };
   const cancelar = () => { abortRef.current?.abort(); setCargando(false); };
+
+  // Auto-refresco cada hora (8am–9pm Bogotá) con los filtros aplicados
+  useAutoRefresh(() => cargar(filtrosAplicados, page), { resetKey: actualizadoEn });
 
   const metricas = useMemo(() => ({
     totalCasos:   data.length,

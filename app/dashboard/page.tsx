@@ -10,6 +10,7 @@ import TablaAdelantos from "@/components/TablaAdelantos";
 import TabResumen from "@/components/TabResumen";
 import TabMes from "@/components/TabMes";
 import { useEquipos } from "@/components/useEquipos";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 const PAGE_SIZE = 50;
 
@@ -169,6 +170,9 @@ export default function Dashboard() {
   };
 
   const refrescar = () => cargar(filtrosAplicados, page, true);
+
+  // Auto-refresco cada hora (8am–9pm Bogotá), solo cuando la pestaña Cobros está activa
+  useAutoRefresh(refrescar, { enabled: pestana === "cobros", resetKey: actualizadoEn });
 
   const irPagina = (pg: number) => {
     setPage(pg);

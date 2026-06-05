@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import type { FilaDia, FilaResumen, ResultadoMes } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 import { useEquipos } from "@/components/useEquipos";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const fmtNum = (n: number) => n.toLocaleString("es-CO");
@@ -323,6 +324,9 @@ export default function TabMes() {
   }, [cargar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aplicar = () => cargar(mes, gestor || undefined, subTipo || undefined, equipo || undefined);
+
+  // Auto-refresco cada hora (8am–9pm Bogotá) con los filtros actuales
+  useAutoRefresh(aplicar, { resetKey: datos });
 
   return (
     <div>

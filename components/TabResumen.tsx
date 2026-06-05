@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import type { FilaResumen, ResultadoResumen } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 import { useEquipos } from "@/components/useEquipos";
+import { useAutoRefresh } from "@/components/useAutoRefresh";
 
 function hoyBogota() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
@@ -239,6 +240,8 @@ export default function TabResumen() {
     }
   };
 
+  // Auto-refresco cada hora (8am–9pm Bogotá) con los filtros aplicados actuales
+  useAutoRefresh(aplicar, { resetKey: datos?.actualizadoEn });
 
   return (
     <div>

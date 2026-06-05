@@ -213,8 +213,11 @@ function filterRedshiftData(
     if (fdEfectiva && c.fechaApertura < fdEfectiva) return false;
     if (filtros.fechaHasta && c.fechaApertura > filtros.fechaHasta) return false;
 
-    // 3. Gestores
-    if (filtros.gestor?.length && !filtros.gestor.includes(c.gestor)) return false;
+    // 3. Gestor / Asesor → propietario del caso (name), parcial e insensible
+    if (filtros.gestor?.length) {
+      const prop = (c.propietario || "").toLowerCase();
+      if (!filtros.gestor.some((g) => prop.includes(g.toLowerCase()))) return false;
+    }
 
     // 4. Subtipos
     if (filtros.subtipo?.length && !filtros.subtipo.includes(c.subTipoCaso)) return false;

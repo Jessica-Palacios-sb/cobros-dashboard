@@ -109,8 +109,9 @@ function buildWhere(f: FiltrosAdelanto, equipoNombres?: string[] | null): { sql:
     cond.push(`a.tipo_adelanto_upsell IN (${ph.join(",")})`);
   }
   if (f.propietario?.length) {
-    const ph = f.propietario.map((p) => { params.push(p); return `$${params.length}`; });
-    cond.push(`a.propietario IN (${ph.join(",")})`);
+    // Propietario parcial e insensible a mayúsculas
+    const ors = f.propietario.map((p) => { params.push(`%${p}%`); return `a.propietario ILIKE $${params.length}`; });
+    cond.push(`(${ors.join(" OR ")})`);
   }
   if (f.busqueda) {
     const v = `%${f.busqueda}%`;
@@ -229,6 +230,11 @@ async function queryAdelantosHoy(filtros: FiltrosAdelanto): Promise<AcuerdoAdela
     if (fac.SBEEMO_RB_ACCOUNT__c) facByAccount.set(String(fac.SBEEMO_RB_ACCOUNT__c), fac);
   }
 
+  // Filtro de propietario (parcial, insensible) sobre las filas de hoy
+  const propTerms = filtros.propietario?.length
+    ? filtros.propietario.map((p) => p.toLowerCase())
+    : null;
+
   return acuerdos.map((ac): AcuerdoAdelanto => {
     const caso      = ac.SBEEMO_RB_CASO__r as FilaSF | undefined;
     const accountId = String(caso?.AccountId ?? "");
@@ -270,7 +276,7 @@ async function queryAdelantosHoy(filtros: FiltrosAdelanto): Promise<AcuerdoAdela
       paymentAmountUsd,
       origen:            "salesforce",
     };
-  });
+  }).filter((r) => !propTerms || propTerms.some((p) => r.propietario.toLowerCase().includes(p)));
 }
 
 // ─── API pública ──────────────────────────────────────────────────────────────

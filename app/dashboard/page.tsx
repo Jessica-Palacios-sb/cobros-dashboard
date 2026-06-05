@@ -250,9 +250,9 @@ export default function Dashboard() {
             />
           </div>
           <div className="campo">
-            <label>Gestor / Asesor</label>
+            <label>Asesor (propietario)</label>
             <input
-              placeholder="ej: jperez, mlopez"
+              placeholder="ej: Julie Quitian"
               value={gestor}
               onChange={(e) => setGestor(e.target.value)}
             />

@@ -102,7 +102,12 @@ export function whereRedshift(f: FiltrosCobros): RedshiftWhere {
     cond.push(`fecha_hora_apertura_real::date <= $${params.length}`);
   }
   if (f.gestor?.length) {
-    cond.push(buildIn("gestor", f.gestor, params));
+    // "Gestor / Asesor" busca por el propietario del caso (name), parcial/insensible.
+    const ors = f.gestor.map((g) => {
+      params.push(`%${g}%`);
+      return `propietario ILIKE $${params.length}`;
+    });
+    cond.push(`(${ors.join(" OR ")})`);
   }
   if (f.subtipo?.length) {
     cond.push(buildIn("sub_tipo_caso", f.subtipo, params));
@@ -163,7 +168,8 @@ export function whereSOQL(f: FiltrosCobros): string {
   ];
 
   if (f.gestor?.length) {
-    cond.push(`SBEEMO_LS_GESTOR__c IN (${f.gestor.map((g) => `'${escSOQL(g)}'`).join(",")})`);
+    // "Gestor / Asesor" busca por el nombre del propietario (Owner.Name), parcial.
+    cond.push(`(${f.gestor.map((g) => `Owner.Name LIKE '%${escSOQL(g)}%'`).join(" OR ")})`);
   }
   if (f.busqueda) {
     const b = escSOQL(f.busqueda);

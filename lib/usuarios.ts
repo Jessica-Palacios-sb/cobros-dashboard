@@ -2,7 +2,7 @@ import { getDb } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 // Contraseña genérica asignada en carga masiva
-export const CLAVE_GENERICA = "Beemo2024!";
+export const CLAVE_GENERICA = "Beemo2026*";
 
 export interface Usuario {
   id: string;

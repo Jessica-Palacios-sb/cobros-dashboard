@@ -2,8 +2,10 @@
 // Cliente Five9 SOAP. Trae dos reportes en paralelo (tiempos + llamadas)
 // y los fusiona por (agent, hora Bogotá).
 //
-// Timezone: Five9 API devuelve horas en Pacific (UTC-8).
-// Bogotá es UTC-5 → ajuste +3 horas al parsear.
+// Timezone: Five9 API devuelve horas en Pacific (America/Los_Angeles).
+// Bogotá es UTC-5 (fijo). La diferencia depende del horario de verano de EE.UU.:
+//   PDT (UTC-7, mar–nov) → +2h    |    PST (UTC-8, nov–mar) → +3h
+// Se calcula dinámicamente según la fecha del dato (no hardcodeado).
 //
 // Flujo SOAP: runReport → poll isReportRunning → getReportResultCsv
 
@@ -97,17 +99,32 @@ function toSec(t: string | undefined): number {
 }
 
 // "07:00" (Pacific) → hora Bogotá. Pacific UTC-8 + 3h = Bogotá UTC-5.
-function pacificToBogota(hhMM: string): number {
+// Offset horario (en horas, ej. -7) de una zona para una fecha dada.
+function offsetHorasTZ(tz: string, d: Date): number {
+  const name = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+    .formatToParts(d).find(p => p.type === "timeZoneName")?.value ?? "GMT+0"; // "GMT-7"
+  const m = name.match(/GMT([+-]?\d{1,2})/);
+  return m ? Number(m[1]) : 0;
+}
+
+// Diferencia Pacific→Bogotá según DST: Bogotá es UTC-5; LA es -7 (PDT) o -8 (PST).
+// Devuelve +2 (verano PDT) o +3 (invierno PST).
+function difPacificBogota(dateStr: string): number {
+  const d = new Date(`${dateStr.replace(/\//g, "-")}T12:00:00Z`); // mediodía UTC evita bordes DST
+  return -5 - offsetHorasTZ("America/Los_Angeles", d);
+}
+
+function pacificToBogota(hhMM: string, dateStr: string): number {
   const h = +(hhMM.split(":")[0] ?? "0");
-  return (h + 3) % 24;
+  return (h + difPacificBogota(dateStr) + 24) % 24;
 }
 
 // "2026/06/01" en hora Pacific → fecha Bogotá.
-// Si la hora Pacific + 3h cruza medianoche, la fecha Bogotá es la siguiente.
+// Si la hora Pacific + diferencia cruza medianoche, la fecha Bogotá es la siguiente.
 function pacificDateToBogota(dateStr: string, hhMM: string): string {
   const d = dateStr.replace(/\//g, "-");
   const h = +(hhMM.split(":")[0] ?? "0");
-  if (h + 3 >= 24) {
+  if (h + difPacificBogota(d) >= 24) {
     // cruzó medianoche: avanzar un día
     const [y, mo, day] = d.split("-").map(Number);
     const next = new Date(y, mo - 1, day + 1);
@@ -164,7 +181,7 @@ export async function getFive9Hoy(
     const agent    = r["AGENT"] ?? "";
     const fechaBog = pacificDateToBogota(r["DATE"] ?? startDate, r["HOUR"] ?? "0:00");
     if (fechaBog < startDate) continue;  // descartar filas anteriores a startDate
-    const hora = pacificToBogota(r["HOUR"] ?? "0:00");
+    const hora = pacificToBogota(r["HOUR"] ?? "0:00", r["DATE"] ?? startDate);
     const prop = agentNameMap.get(agent) ?? agent;
     const key  = `${fechaBog}||${agent}||${hora}`;
     map.set(key, {
@@ -182,7 +199,7 @@ export async function getFive9Hoy(
     const agent    = r["AGENT"] ?? "";
     const fechaBog = pacificDateToBogota(r["DATE"] ?? startDate, r["HOUR"] ?? "0:00");
     if (fechaBog < startDate) continue;
-    const hora = pacificToBogota(r["HOUR"] ?? "0:00");
+    const hora = pacificToBogota(r["HOUR"] ?? "0:00", r["DATE"] ?? startDate);
     const prop = agentNameMap.get(agent) ?? agent;
     const key  = `${fechaBog}||${agent}||${hora}`;
     const talkSec = toSec(r["TALK_TIME"]);

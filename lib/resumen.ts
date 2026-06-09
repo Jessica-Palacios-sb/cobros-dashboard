@@ -439,13 +439,27 @@ export async function getResumen(
   const allF9 = [...f9Hist, ...f9Hoy].filter(r => pasaEquipo(r.propietario, equipo, equipoMap));
   const { byHora: f9ByHora, byProp: f9ByProp } = buildFive9Maps(allF9);
 
-  const porHora = toResumen(combined, r => String(r.hora), totalCant)
-    .sort((a, b) => Number(a.key) - Number(b.key))
-    .map(f => ({ ...f, five9: f9ByHora.get(f.key) }));
+  // Universo de claves = cobros ∪ Five9, para que "Por hora" y "Por propietario"
+  // incluyan TODA la actividad de Five9 (incluso horas/asesores sin cobros) y las dos
+  // tablas reconcilien: la suma de arriba (hora) = la suma de abajo (propietario).
+  const filaVacia = (key: string): FilaResumen => ({
+    key, cant: 0, cashTotal: 0, totalAmount: 0, discountPct: 0, ticket: 0, pct: 0,
+  });
 
-  const porPropietario = toResumen(combined, r => r.propietario, totalCant)
-    .sort((a, b) => b.cant - a.cant)
-    .map(f => ({ ...f, five9: f9ByProp.get(f.key) }));
+  const cobrosPorHora = new Map(
+    toResumen(combined, r => String(r.hora), totalCant).map(f => [f.key, f] as const)
+  );
+  const porHora = Array.from(new Set<string>([...cobrosPorHora.keys(), ...f9ByHora.keys()]))
+    .map(key => ({ ...(cobrosPorHora.get(key) ?? filaVacia(key)), five9: f9ByHora.get(key) }))
+    .sort((a, b) => Number(a.key) - Number(b.key));
+
+  const cobrosPorProp = new Map(
+    toResumen(combined, r => r.propietario, totalCant).map(f => [f.key, f] as const)
+  );
+  const porPropietario = Array.from(new Set<string>([...cobrosPorProp.keys(), ...f9ByProp.keys()]))
+    .filter(key => key !== "")
+    .map(key => ({ ...(cobrosPorProp.get(key) ?? filaVacia(key)), five9: f9ByProp.get(key) }))
+    .sort((a, b) => b.cant - a.cant);
 
   return {
     porHora,

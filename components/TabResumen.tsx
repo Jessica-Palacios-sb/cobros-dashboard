@@ -323,6 +323,34 @@ export default function TabResumen() {
 
       {error && <div className="estado-error">⚠ {error}</div>}
 
+      {/* Franja de alertas (solo para el período "hoy") */}
+      {periodo === "hoy" && datos?.alertas && (datos.alertas.hora.length > 0 || datos.alertas.hoy.length > 0) && (() => {
+        const cnt = (arr: typeof datos.alertas.hoy) => ({
+          r: arr.filter(x => x.severidad === "roja").length,
+          y: arr.filter(x => x.severidad === "amarilla").length,
+        });
+        const ch = cnt(datos.alertas.hora), cd = cnt(datos.alertas.hoy);
+        const top = [
+          ...datos.alertas.hora.filter(x => x.severidad === "roja"),
+          ...datos.alertas.hoy.filter(x => x.severidad === "roja"),
+        ].slice(0, 5);
+        return (
+          <div style={{ background: "#7f1d1d22", border: "1px solid #b91c1c55", borderRadius: 8, padding: "10px 14px", margin: "0 0 14px" }}>
+            <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+              <strong style={{ color: "#fca5a5" }}>⚠ Alertas</strong>
+              <span>Última hora: <b style={{ color: "#f87171" }}>{ch.r} 🔴</b>&nbsp; <b style={{ color: "#fbbf24" }}>{ch.y} 🟡</b></span>
+              <span>Hoy: <b style={{ color: "#f87171" }}>{cd.r} 🔴</b>&nbsp; <b style={{ color: "#fbbf24" }}>{cd.y} 🟡</b></span>
+              <span style={{ color: "#9ca3af" }}>· detalle en la pestaña «Alertas»</span>
+            </div>
+            {top.length > 0 && (
+              <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "#e5e7eb", fontSize: 13 }}>
+                {top.map((x, i) => (<li key={i}><b>{x.propietario}</b>: {x.mensaje}</li>))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Tarjetas de totales */}
       {datos && (
         <div className="metricas-bar">

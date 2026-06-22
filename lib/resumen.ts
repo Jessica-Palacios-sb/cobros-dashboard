@@ -18,6 +18,7 @@ import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
 import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
+import { calcularAlertas, horaBogotaActual, type AgregadoAsesor } from "@/lib/alertas";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -461,12 +462,37 @@ export async function getResumen(
     .map(key => ({ ...(cobrosPorProp.get(key) ?? filaVacia(key)), five9: f9ByProp.get(key) }))
     .sort((a, b) => b.cant - a.cant);
 
+  // ── Alertas (relativas al equipo): agregados por asesor, hoy y última hora ──
+  const agregadosPorAsesor = (soloHora?: number): AgregadoAsesor[] => {
+    const map = new Map<string, AgregadoAsesor>();
+    const get = (p: string) => {
+      let e = map.get(p);
+      if (!e) { e = { propietario: p, cobros: 0, llamadas: 0, notReadySeg: 0, buzones: 0, loginSeg: 0 }; map.set(p, e); }
+      return e;
+    };
+    for (const r of combined.values()) {
+      if (soloHora !== undefined && r.hora !== soloHora) continue;
+      get(r.propietario).cobros += r.cant;
+    }
+    for (const r of allF9) {
+      if (soloHora !== undefined && r.hora !== soloHora) continue;
+      const e = get(r.propietario);
+      e.llamadas    += r.totalLlamadas;
+      e.notReadySeg += r.notReadySeg;
+      e.buzones     += r.buzones;
+      e.loginSeg    += r.loginSeg;
+    }
+    return [...map.values()];
+  };
+  const alertas = calcularAlertas(agregadosPorAsesor(), agregadosPorAsesor(horaBogotaActual()));
+
   return {
     porHora,
     porPropietario,
     totales: { cant: totalCant, cashTotal: totalCash, ticket: totalCant > 0 ? totalCash / totalCant : 0 },
     sfError,
     five9Error,
+    alertas,
     actualizadoEn: new Date().toISOString(),
   };
 }

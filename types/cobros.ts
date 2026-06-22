@@ -153,6 +153,26 @@ export interface ResultadoResumen {
   actualizadoEn: string;
   sfError?: string;
   five9Error?: string;
+  alertas?: AlertasResumen;
+}
+
+// ─── Alertas (relativas al equipo) ────────────────────────────────────────────
+
+export type AlertaTipo = "llamadas" | "notReady" | "conversion" | "buzones";
+export type AlertaSeveridad = "roja" | "amarilla";
+
+export interface Alerta {
+  tipo: AlertaTipo;
+  severidad: AlertaSeveridad;
+  propietario: string;
+  mensaje: string;      // texto humano listo para mostrar
+  valor: number;        // valor del asesor (para ordenar/depurar)
+  referencia: number;   // mediana del equipo
+}
+
+export interface AlertasResumen {
+  hoy: Alerta[];
+  hora: Alerta[];       // "última hora" (hora Bogotá actual)
 }
 
 export interface FilaDetalle {

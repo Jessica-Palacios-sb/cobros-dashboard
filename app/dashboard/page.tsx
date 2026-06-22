@@ -9,6 +9,7 @@ import { CasoCobro, FiltrosCobros } from "@/types/cobros";
 import TablaAdelantos from "@/components/TablaAdelantos";
 import TabResumen from "@/components/TabResumen";
 import TabMes from "@/components/TabMes";
+import TabAlertas from "@/components/TabAlertas";
 import { useEquipos } from "@/components/useEquipos";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
 
@@ -39,7 +40,7 @@ const fmtFecha = (iso: string) =>
 export default function Dashboard() {
   const { data: session } = useSession();
   const esAdmin = session?.user?.rol === "admin";
-  const [pestana, setPestana] = useState<"resumen" | "mes" | "cobros" | "adelantos">("resumen");
+  const [pestana, setPestana] = useState<"resumen" | "alertas" | "mes" | "cobros" | "adelantos">("resumen");
 
   const todayInit = hoyBogota();
   const [fechaDesde, setFechaDesde] = useState(todayInit);
@@ -216,6 +217,12 @@ export default function Dashboard() {
             Resumen
           </button>
           <button
+            className={`tab${pestana === "alertas" ? " tab-activo" : ""}`}
+            onClick={() => setPestana("alertas")}
+          >
+            Alertas
+          </button>
+          <button
             className={`tab${pestana === "mes" ? " tab-activo" : ""}`}
             onClick={() => setPestana("mes")}
           >
@@ -237,6 +244,8 @@ export default function Dashboard() {
 
         {pestana === "resumen" ? (
           <TabResumen />
+        ) : pestana === "alertas" ? (
+          <TabAlertas />
         ) : pestana === "mes" ? (
           <TabMes />
         ) : pestana === "adelantos" ? (

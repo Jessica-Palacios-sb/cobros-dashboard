@@ -171,8 +171,7 @@ export interface Alerta {
 }
 
 export interface AlertasResumen {
-  hoy: Alerta[];
-  hora: Alerta[];       // "última hora" (hora Bogotá actual)
+  hoy: Alerta[];        // acumulado del día
 }
 
 export interface FilaDetalle {

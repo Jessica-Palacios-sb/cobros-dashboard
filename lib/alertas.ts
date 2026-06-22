@@ -124,9 +124,6 @@ function evaluar(asesores: AgregadoAsesor[]): Alerta[] {
   return out.sort((x, y) => (x.severidad === y.severidad ? 0 : x.severidad === "roja" ? -1 : 1));
 }
 
-export function calcularAlertas(
-  perPropHoy: AgregadoAsesor[],
-  perPropHora: AgregadoAsesor[],
-): AlertasResumen {
-  return { hoy: evaluar(perPropHoy), hora: evaluar(perPropHora) };
+export function calcularAlertas(perPropHoy: AgregadoAsesor[]): AlertasResumen {
+  return { hoy: evaluar(perPropHoy) };
 }

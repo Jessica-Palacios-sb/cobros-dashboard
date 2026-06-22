@@ -18,7 +18,7 @@ import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
 import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
-import { calcularAlertas, horaBogotaActual, type AgregadoAsesor } from "@/lib/alertas";
+import { calcularAlertas, type AgregadoAsesor } from "@/lib/alertas";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -484,7 +484,7 @@ export async function getResumen(
     }
     return [...map.values()];
   };
-  const alertas = calcularAlertas(agregadosPorAsesor(), agregadosPorAsesor(horaBogotaActual()));
+  const alertas = calcularAlertas(agregadosPorAsesor());
 
   return {
     porHora,

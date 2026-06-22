@@ -114,7 +114,7 @@ export default function TabAlertas() {
       </div>
 
       <p style={{ color: "#9ca3af", fontSize: 13, margin: "0 0 14px" }}>
-        Alertas relativas a cómo va el equipo (mediana). No requieren umbrales: se calibran solas al ritmo del día.
+        Alertas del día relativas a cómo va el equipo (mediana). No requieren umbrales: se calibran solas al ritmo del día.
       </p>
 
       {error && <div className="estado-error">⚠ {error}</div>}
@@ -122,10 +122,7 @@ export default function TabAlertas() {
       {cargando && !datos ? (
         <div className="estado-carga"><span className="spinner" /> Cargando alertas…</div>
       ) : alertas ? (
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <ListaAlertas titulo="Última hora" alertas={alertas.hora} />
-          <ListaAlertas titulo="Hoy (acumulado)" alertas={alertas.hoy} />
-        </div>
+        <ListaAlertas titulo="Hoy (acumulado)" alertas={alertas.hoy} />
       ) : null}
     </div>
   );

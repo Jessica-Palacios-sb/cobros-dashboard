@@ -2,8 +2,10 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import type { ReglaAlerta, AlertaMetrica, AlertaAmbito, AlertaOperador, AlertaTono } from "@/types/cobros";
+import type { ReglaAlerta, AlertaMetrica, AlertaAmbito, AlertaOperador, AlertaTono, AlertaVentana } from "@/types/cobros";
 import { useEquipos } from "@/components/useEquipos";
+
+const VENTANA_LABEL: Record<string, string> = { dia: "Día", semana: "Semana", mes: "Mes", rango: "Rango" };
 
 const METRICAS: { v: AlertaMetrica; label: string }[] = [
   { v: "cobros",       label: "Cobros (#)" },
@@ -39,6 +41,9 @@ export default function AdminAlertasPage() {
   const [equipo, setEquipo]     = useState("");
   const [mensaje, setMensaje]   = useState("");
   const [mostrarProgreso, setMostrarProgreso] = useState(false);
+  const [ventana, setVentana]   = useState<AlertaVentana>("dia");
+  const [fDesde, setFDesde]     = useState("");
+  const [fHasta, setFHasta]     = useState("");
 
   useEffect(() => {
     if (status === "loading") return;
@@ -65,6 +70,7 @@ export default function AdminAlertasPage() {
   const crear = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim() || umbral === "") { setError("Completa nombre y umbral."); return; }
+    if (ventana === "rango" && (!fDesde || !fHasta)) { setError("Completa las fechas del rango."); return; }
     setGuardando(true); setError("");
     try {
       const res = await fetch("/api/admin/alertas", {
@@ -73,6 +79,7 @@ export default function AdminAlertasPage() {
         body: JSON.stringify({
           nombre, metrica, ambito, operador, umbral: Number(umbral),
           tono, severidad, equipo, mensaje, mostrarProgreso,
+          ventana, fechaDesde: fDesde, fechaHasta: fHasta,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
@@ -159,6 +166,27 @@ export default function AdminAlertasPage() {
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#9ca3af" }}>
+              Ventana
+              <select value={ventana} onChange={e => setVentana(e.target.value as AlertaVentana)} style={inputStyle}>
+                <option value="dia">Día (hoy)</option>
+                <option value="semana">Semana (en curso)</option>
+                <option value="mes">Mes (en curso)</option>
+                <option value="rango">Rango de fechas</option>
+              </select>
+            </label>
+            {ventana === "rango" && (
+              <>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#9ca3af" }}>
+                  Desde
+                  <input type="date" value={fDesde} onChange={e => setFDesde(e.target.value)} style={inputStyle} />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#9ca3af" }}>
+                  Hasta
+                  <input type="date" value={fHasta} onChange={e => setFHasta(e.target.value)} style={inputStyle} />
+                </label>
+              </>
+            )}
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#9ca3af" }}>
               Color
               <select value={severidad} onChange={e => setSeveridad(e.target.value as any)} style={inputStyle}>
                 <option value="roja">🔴 Roja</option>
@@ -190,20 +218,21 @@ export default function AdminAlertasPage() {
               <thead>
                 <tr>
                   <th>Nombre</th><th>Tono</th><th>Ámbito</th><th>Regla</th>
-                  <th>Equipo</th><th>Progreso</th><th>Estado</th><th></th>
+                  <th>Ventana</th><th>Equipo</th><th>Progreso</th><th>Estado</th><th></th>
                 </tr>
               </thead>
               <tbody>
                 {cargando ? (
-                  <tr><td colSpan={8} style={{ textAlign: "center", padding: 32 }}><span className="spinner" /> Cargando…</td></tr>
+                  <tr><td colSpan={9} style={{ textAlign: "center", padding: 32 }}><span className="spinner" /> Cargando…</td></tr>
                 ) : reglas.length === 0 ? (
-                  <tr><td colSpan={8} className="estado-vacio" style={{ padding: 24 }}>Aún no hay reglas. Crea la primera arriba.</td></tr>
+                  <tr><td colSpan={9} className="estado-vacio" style={{ padding: 24 }}>Aún no hay reglas. Crea la primera arriba.</td></tr>
                 ) : reglas.map(r => (
                   <tr key={r.id} style={{ opacity: r.activo ? 1 : 0.5 }}>
                     <td style={{ fontWeight: 600 }}>{r.nombre}</td>
                     <td>{r.tono === "positiva" ? "🟢 Positiva" : "🔴 Negativa"}</td>
                     <td>{r.ambito === "equipo" ? "Equipo" : "Asesor"}</td>
                     <td className="mono">{METRICA_LABEL[r.metrica] ?? r.metrica} {r.operador} {r.umbral}</td>
+                    <td>{r.ventana === "rango" ? `${r.fechaDesde}→${r.fechaHasta}` : (VENTANA_LABEL[r.ventana] ?? r.ventana)}</td>
                     <td>{r.equipo || "Todos"}</td>
                     <td>{r.mostrarProgreso ? "Sí" : "—"}</td>
                     <td>

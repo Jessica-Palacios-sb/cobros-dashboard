@@ -18,8 +18,7 @@ import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
 import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
-import { calcularAlertas, type AgregadoAsesor, type AgregadoEquipo } from "@/lib/alertas";
-import { listReglas } from "@/lib/alertasConfig";
+import { calcularAlertas, type AgregadoAsesor } from "@/lib/alertas";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -463,18 +462,13 @@ export async function getResumen(
     .map(key => ({ ...(cobrosPorProp.get(key) ?? filaVacia(key)), five9: f9ByProp.get(key) }))
     .sort((a, b) => b.cant - a.cant);
 
-  // ── Alertas del día: relativas (mediana) + reglas configurables del admin ──
-  const reglas = await listReglas(true).catch(() => []);
-  // Mapa nombre→equipo (reusa el del filtro de equipo; si no, se carga solo si hay reglas)
-  let nombreEquipo = equipoMap;
-  if (reglas.length > 0 && !nombreEquipo) nombreEquipo = await getNombreEquipoMap().catch(() => null);
-
+  // ── Alertas relativas del día (las reglas configurables se evalúan en /api/alertas) ──
   const perAsesor: AgregadoAsesor[] = (() => {
     const map = new Map<string, AgregadoAsesor>();
     const get = (p: string) => {
       let e = map.get(p);
       if (!e) {
-        e = { propietario: p, equipo: nombreEquipo?.get(p) ?? "", cobros: 0, cash: 0, llamadas: 0, llamadas2min: 0, notReadySeg: 0, buzones: 0, loginSeg: 0 };
+        e = { propietario: p, cobros: 0, cash: 0, llamadas: 0, llamadas2min: 0, notReadySeg: 0, buzones: 0, loginSeg: 0 };
         map.set(p, e);
       }
       return e;
@@ -488,20 +482,7 @@ export async function getResumen(
     return [...map.values()];
   })();
 
-  const perEquipo: AgregadoEquipo[] = (() => {
-    const map = new Map<string, AgregadoEquipo>();
-    for (const a of perAsesor) {
-      const eq = a.equipo || "";
-      if (!eq || !a.propietario || a.propietario === "—" || /queue/i.test(a.propietario)) continue;
-      let e = map.get(eq);
-      if (!e) { e = { equipo: eq, cobros: 0, cash: 0, llamadas: 0, llamadas2min: 0, notReadySeg: 0, buzones: 0, loginSeg: 0, nAsesores: 0 }; map.set(eq, e); }
-      e.cobros += a.cobros; e.cash += a.cash; e.llamadas += a.llamadas; e.llamadas2min += a.llamadas2min;
-      e.notReadySeg += a.notReadySeg; e.buzones += a.buzones; e.loginSeg += a.loginSeg; e.nAsesores++;
-    }
-    return [...map.values()];
-  })();
-
-  const alertas = calcularAlertas(perAsesor, perEquipo, reglas);
+  const alertas = calcularAlertas(perAsesor);
 
   return {
     porHora,

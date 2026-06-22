@@ -172,6 +172,7 @@ export interface Alerta {
   tono?: "positiva" | "negativa";
   ambito?: "asesor" | "equipo";
   nombre?: string;              // nombre de la regla (config)
+  ventanaLabel?: string;        // "Día" | "Semana" | "Mes" | "1–15 jun" (config)
   progreso?: { actual: number; meta: number; logrado: boolean };
 }
 
@@ -187,6 +188,7 @@ export type AlertaMetrica =
 export type AlertaAmbito = "asesor" | "equipo";
 export type AlertaOperador = ">=" | "<=" | ">" | "<" | "=";
 export type AlertaTono = "positiva" | "negativa";
+export type AlertaVentana = "dia" | "semana" | "mes" | "rango";
 
 export interface ReglaAlerta {
   id: string;
@@ -200,6 +202,9 @@ export interface ReglaAlerta {
   equipo: string;               // "" = todos
   mensaje: string;              // "" = autogenerado
   mostrarProgreso: boolean;     // acelerador: barra de progreso hacia el umbral
+  ventana: AlertaVentana;       // periodo de acumulado
+  fechaDesde: string;           // solo si ventana = "rango" (YYYY-MM-DD)
+  fechaHasta: string;           // solo si ventana = "rango"
   activo: boolean;
   creadoEn: string;
 }

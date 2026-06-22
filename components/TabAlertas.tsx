@@ -1,12 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import type { Alerta, ResultadoResumen } from "@/types/cobros";
+import type { Alerta } from "@/types/cobros";
 import { useEquipos } from "@/components/useEquipos";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
 
-function hoyBogota() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
-}
+interface ResultadoAlertas { alertas: Alerta[]; actualizadoEn: string; error?: string }
 
 const fmtFecha = (iso: string) =>
   iso ? new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—";
@@ -54,12 +52,17 @@ function ListaAlertas({ titulo, alertas, vacio }: { titulo: string; alertas: Ale
             <li key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 16px", borderBottom: "1px solid #ffffff0d" }}>
               <span style={{ fontSize: 14, lineHeight: "20px" }}>{dot(a.severidad)}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>
+                <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   {a.propietario}
                   <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 12 }}>
-                    {" "}· {a.nombre ?? TIPO_LABEL[a.tipo] ?? a.tipo}
+                    · {a.nombre ?? TIPO_LABEL[a.tipo] ?? a.tipo}
                     {a.ambito === "equipo" ? " · equipo" : ""}
                   </span>
+                  {a.ventanaLabel && (
+                    <span style={{ fontSize: 11, color: "#9ca3af", border: "1px solid #ffffff22", borderRadius: 6, padding: "1px 6px" }}>
+                      {a.ventanaLabel}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: "#d1d5db" }}>{a.mensaje}</div>
                 {a.progreso && <BarraProgreso {...a.progreso} />}
@@ -80,7 +83,7 @@ function ordenar(arr: Alerta[]): Alerta[] {
 export default function TabAlertas() {
   const [equipo, setEquipo] = useState("");
   const equipos = useEquipos();
-  const [datos, setDatos] = useState<ResultadoResumen | null>(null);
+  const [datos, setDatos] = useState<ResultadoAlertas | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
 
@@ -88,17 +91,15 @@ export default function TabAlertas() {
     setCargando(true);
     setError("");
     try {
-      const hoy = hoyBogota();
-      const q = new URLSearchParams({ fechaDesde: hoy, fechaHasta: hoy });
+      const q = new URLSearchParams();
       if (eq) q.set("equipo", eq);
-      const res = await fetch(`/api/resumen?${q}`);
+      const res = await fetch(`/api/alertas?${q}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `Error ${res.status}`);
       }
-      const json: ResultadoResumen = await res.json();
+      const json: ResultadoAlertas = await res.json();
       setDatos(json);
-      if (json.five9Error) setError(`Five9: ${json.five9Error}`);
     } catch (e: any) {
       setError(e.message);
       setDatos(null);
@@ -112,7 +113,7 @@ export default function TabAlertas() {
   // Auto-refresco horario (8am–9pm Bogotá)
   useAutoRefresh(() => cargar(equipo || undefined), { resetKey: datos?.actualizadoEn });
 
-  const alertas = datos?.alertas;
+  const alertas = datos?.alertas ?? null;
 
   return (
     <div>
@@ -139,7 +140,7 @@ export default function TabAlertas() {
       </div>
 
       <p style={{ color: "#9ca3af", fontSize: 13, margin: "0 0 14px" }}>
-        Alertas del día relativas a cómo va el equipo (mediana). No requieren umbrales: se calibran solas al ritmo del día.
+        Alertas automáticas (relativas al equipo, del día) + reglas/aceleradores que defina el admin, cada una sobre su ventana de tiempo.
       </p>
 
       {error && <div className="estado-error">⚠ {error}</div>}
@@ -150,12 +151,12 @@ export default function TabAlertas() {
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <ListaAlertas
             titulo="🟢 Aceleradores y positivas"
-            alertas={ordenar(alertas.hoy.filter(a => a.tono === "positiva"))}
+            alertas={ordenar(alertas.filter(a => a.tono === "positiva"))}
             vacio="Sin aceleradores configurados aún."
           />
           <ListaAlertas
             titulo="🔴 A mejorar"
-            alertas={ordenar(alertas.hoy.filter(a => a.tono !== "positiva"))}
+            alertas={ordenar(alertas.filter(a => a.tono !== "positiva"))}
             vacio="Todo en orden. 👍"
           />
         </div>

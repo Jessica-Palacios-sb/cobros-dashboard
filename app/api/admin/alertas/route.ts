@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     if (!b.nombre || !b.metrica || !b.ambito || !b.operador || b.umbral === undefined || !b.tono) {
       return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
     }
+    const ventana = ["dia", "semana", "mes", "rango"].includes(b.ventana) ? b.ventana : "dia";
     const regla: ReglaInput = {
       nombre:          String(b.nombre).trim(),
       metrica:         b.metrica,
@@ -42,6 +43,9 @@ export async function POST(req: NextRequest) {
       equipo:          (b.equipo ?? "").trim(),
       mensaje:         (b.mensaje ?? "").trim(),
       mostrarProgreso: !!b.mostrarProgreso,
+      ventana,
+      fechaDesde:      ventana === "rango" ? (b.fechaDesde ?? "") : "",
+      fechaHasta:      ventana === "rango" ? (b.fechaHasta ?? "") : "",
     };
     return NextResponse.json(await crearRegla(regla), { status: 201 });
   } catch (e: any) {

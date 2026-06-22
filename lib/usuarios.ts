@@ -13,6 +13,7 @@ export interface Usuario {
   mustChangePassword: boolean;
   equipo: string;
   creadoEn: string;
+  ultimoIngreso: string;   // ISO; "" si nunca ha ingresado
 }
 
 type UsuarioConHash = Usuario & { password_hash: string };
@@ -30,6 +31,7 @@ export async function initTabla(): Promise<void> {
       activo              BOOLEAN NOT NULL DEFAULT true,
       must_change_password BOOLEAN NOT NULL DEFAULT false,
       equipo              VARCHAR(255) NOT NULL DEFAULT '',
+      ultimo_ingreso      TIMESTAMPTZ,
       creado_en           TIMESTAMPTZ DEFAULT NOW()
     )
   `;
@@ -41,6 +43,10 @@ export async function initTabla(): Promise<void> {
   await sql`
     ALTER TABLE usuarios
       ADD COLUMN IF NOT EXISTS equipo VARCHAR(255) NOT NULL DEFAULT ''
+  `;
+  await sql`
+    ALTER TABLE usuarios
+      ADD COLUMN IF NOT EXISTS ultimo_ingreso TIMESTAMPTZ
   `;
 }
 
@@ -66,6 +72,9 @@ export async function verifyUser(email: string, password: string): Promise<Usuar
   if (!user || !user.activo) return null;
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return null;
+  // Registrar el último ingreso (no bloquear el login si falla)
+  const sql = getDb();
+  await sql`UPDATE usuarios SET ultimo_ingreso = NOW() WHERE id = ${Number(user.id)}`.catch(() => {});
   const { password_hash, ...rest } = user;
   return rest as Usuario;
 }
@@ -75,8 +84,9 @@ export async function listUsers(): Promise<Usuario[]> {
   // Ejecuta las migraciones en el primer acceso post-deploy
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT false`.catch(() => {});
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS equipo VARCHAR(255) NOT NULL DEFAULT ''`.catch(() => {});
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ultimo_ingreso TIMESTAMPTZ`.catch(() => {});
   const rows = await sql`
-    SELECT id, email, nombre, rol, activo, must_change_password, equipo, creado_en
+    SELECT id, email, nombre, rol, activo, must_change_password, equipo, ultimo_ingreso, creado_en
     FROM usuarios ORDER BY nombre
   `;
   return (rows as any[]).map((r) => ({
@@ -87,6 +97,7 @@ export async function listUsers(): Promise<Usuario[]> {
     activo:             r.activo,
     mustChangePassword: r.must_change_password ?? false,
     equipo:             r.equipo ?? "",
+    ultimoIngreso:      r.ultimo_ingreso ? new Date(r.ultimo_ingreso).toISOString() : "",
     creadoEn:           r.creado_en ? new Date(r.creado_en).toISOString() : "",
   }));
 }

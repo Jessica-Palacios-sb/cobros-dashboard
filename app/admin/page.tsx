@@ -12,6 +12,7 @@ interface Usuario {
   activo: boolean;
   equipo: string;
   creadoEn: string;
+  ultimoIngreso: string;
 }
 
 interface FilaExcel { nombre: string; email: string; equipo: string; }
@@ -269,6 +270,7 @@ export default function AdminPage() {
                   <th>Equipo</th>
                   <th>Rol</th>
                   <th>Estado</th>
+                  <th>Último ingreso</th>
                   <th>Fecha registro</th>
                   <th>Acciones</th>
                 </tr>
@@ -276,7 +278,7 @@ export default function AdminPage() {
               <tbody>
                 {cargando ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: 32 }}>
+                    <td colSpan={8} style={{ textAlign: "center", padding: 32 }}>
                       <span className="spinner" /> Cargando…
                     </td>
                   </tr>
@@ -346,6 +348,11 @@ export default function AdminPage() {
                           >
                             {u.activo ? "Aprobado" : "Suspendido"}
                           </span>
+                        </td>
+
+                        {/* Último ingreso */}
+                        <td style={{ color: "#6b7280", fontSize: 13 }}>
+                          {u.ultimoIngreso ? fmtFechaHora(u.ultimoIngreso) : <span style={{ color: "#9ca3af" }}>Nunca</span>}
                         </td>
 
                         {/* Fecha registro */}

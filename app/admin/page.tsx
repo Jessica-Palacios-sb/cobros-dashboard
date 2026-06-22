@@ -234,6 +234,9 @@ export default function AdminPage() {
             </p>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
+            <a href="/admin/alertas" className="btn btn-ghost" style={{ textDecoration: "none" }}>
+              🔔 Alertas y aceleradores
+            </a>
             <button className="btn btn-ghost" onClick={cargarUsuarios} disabled={cargando}>
               {cargando ? <span className="spinner" /> : "↻"} Actualizar
             </button>

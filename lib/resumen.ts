@@ -18,7 +18,8 @@ import { getFive9Hoy, type Five9Row } from "@/lib/five9";
 import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
 import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
-import { calcularAlertas, type AgregadoAsesor } from "@/lib/alertas";
+import { calcularAlertas, type AgregadoAsesor, type AgregadoEquipo } from "@/lib/alertas";
+import { listReglas } from "@/lib/alertasConfig";
 export type { FilaResumen, ResultadoResumen };
 
 // CTE adelantos (solo campos necesarios para la agregación)
@@ -462,29 +463,45 @@ export async function getResumen(
     .map(key => ({ ...(cobrosPorProp.get(key) ?? filaVacia(key)), five9: f9ByProp.get(key) }))
     .sort((a, b) => b.cant - a.cant);
 
-  // ── Alertas (relativas al equipo): agregados por asesor, hoy y última hora ──
-  const agregadosPorAsesor = (soloHora?: number): AgregadoAsesor[] => {
+  // ── Alertas del día: relativas (mediana) + reglas configurables del admin ──
+  const reglas = await listReglas(true).catch(() => []);
+  // Mapa nombre→equipo (reusa el del filtro de equipo; si no, se carga solo si hay reglas)
+  let nombreEquipo = equipoMap;
+  if (reglas.length > 0 && !nombreEquipo) nombreEquipo = await getNombreEquipoMap().catch(() => null);
+
+  const perAsesor: AgregadoAsesor[] = (() => {
     const map = new Map<string, AgregadoAsesor>();
     const get = (p: string) => {
       let e = map.get(p);
-      if (!e) { e = { propietario: p, cobros: 0, llamadas: 0, notReadySeg: 0, buzones: 0, loginSeg: 0 }; map.set(p, e); }
+      if (!e) {
+        e = { propietario: p, equipo: nombreEquipo?.get(p) ?? "", cobros: 0, cash: 0, llamadas: 0, llamadas2min: 0, notReadySeg: 0, buzones: 0, loginSeg: 0 };
+        map.set(p, e);
+      }
       return e;
     };
-    for (const r of combined.values()) {
-      if (soloHora !== undefined && r.hora !== soloHora) continue;
-      get(r.propietario).cobros += r.cant;
-    }
+    for (const r of combined.values()) { const e = get(r.propietario); e.cobros += r.cant; e.cash += r.cashTotal; }
     for (const r of allF9) {
-      if (soloHora !== undefined && r.hora !== soloHora) continue;
       const e = get(r.propietario);
-      e.llamadas    += r.totalLlamadas;
-      e.notReadySeg += r.notReadySeg;
-      e.buzones     += r.buzones;
-      e.loginSeg    += r.loginSeg;
+      e.llamadas += r.totalLlamadas; e.llamadas2min += r.llamadas2min;
+      e.notReadySeg += r.notReadySeg; e.buzones += r.buzones; e.loginSeg += r.loginSeg;
     }
     return [...map.values()];
-  };
-  const alertas = calcularAlertas(agregadosPorAsesor());
+  })();
+
+  const perEquipo: AgregadoEquipo[] = (() => {
+    const map = new Map<string, AgregadoEquipo>();
+    for (const a of perAsesor) {
+      const eq = a.equipo || "";
+      if (!eq || !a.propietario || a.propietario === "—" || /queue/i.test(a.propietario)) continue;
+      let e = map.get(eq);
+      if (!e) { e = { equipo: eq, cobros: 0, cash: 0, llamadas: 0, llamadas2min: 0, notReadySeg: 0, buzones: 0, loginSeg: 0, nAsesores: 0 }; map.set(eq, e); }
+      e.cobros += a.cobros; e.cash += a.cash; e.llamadas += a.llamadas; e.llamadas2min += a.llamadas2min;
+      e.notReadySeg += a.notReadySeg; e.buzones += a.buzones; e.loginSeg += a.loginSeg; e.nAsesores++;
+    }
+    return [...map.values()];
+  })();
+
+  const alertas = calcularAlertas(perAsesor, perEquipo, reglas);
 
   return {
     porHora,

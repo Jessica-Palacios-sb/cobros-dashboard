@@ -156,22 +156,52 @@ export interface ResultadoResumen {
   alertas?: AlertasResumen;
 }
 
-// ─── Alertas (relativas al equipo) ────────────────────────────────────────────
+// ─── Alertas (relativas al equipo + configurables por el admin) ───────────────
 
 export type AlertaTipo = "llamadas" | "notReady" | "conversion" | "buzones";
-export type AlertaSeveridad = "roja" | "amarilla";
+export type AlertaSeveridad = "roja" | "amarilla" | "verde";
 
 export interface Alerta {
-  tipo: AlertaTipo;
+  tipo: string;                 // tipo relativo o métrica de la regla
   severidad: AlertaSeveridad;
-  propietario: string;
-  mensaje: string;      // texto humano listo para mostrar
-  valor: number;        // valor del asesor (para ordenar/depurar)
-  referencia: number;   // mediana del equipo
+  propietario: string;          // sujeto: nombre del asesor o del equipo
+  mensaje: string;              // texto humano listo para mostrar
+  valor: number;
+  referencia: number;           // mediana (relativas) o umbral (config)
+  origen?: "relativa" | "config";
+  tono?: "positiva" | "negativa";
+  ambito?: "asesor" | "equipo";
+  nombre?: string;              // nombre de la regla (config)
+  progreso?: { actual: number; meta: number; logrado: boolean };
 }
 
 export interface AlertasResumen {
   hoy: Alerta[];        // acumulado del día
+}
+
+// ─── Reglas de alerta configurables ───────────────────────────────────────────
+
+export type AlertaMetrica =
+  | "cobros" | "cash" | "conversion" | "llamadas" | "llamadas2min"
+  | "notReadyMin" | "buzonesPct";
+export type AlertaAmbito = "asesor" | "equipo";
+export type AlertaOperador = ">=" | "<=" | ">" | "<" | "=";
+export type AlertaTono = "positiva" | "negativa";
+
+export interface ReglaAlerta {
+  id: string;
+  nombre: string;
+  metrica: AlertaMetrica;
+  ambito: AlertaAmbito;
+  operador: AlertaOperador;
+  umbral: number;
+  tono: AlertaTono;
+  severidad: AlertaSeveridad;   // color del chip
+  equipo: string;               // "" = todos
+  mensaje: string;              // "" = autogenerado
+  mostrarProgreso: boolean;     // acelerador: barra de progreso hacia el umbral
+  activo: boolean;
+  creadoEn: string;
 }
 
 export interface FilaDetalle {

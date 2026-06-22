@@ -325,14 +325,17 @@ export default function TabResumen() {
 
       {/* Franja de alertas (solo para el período "hoy") */}
       {periodo === "hoy" && datos?.alertas && datos.alertas.hoy.length > 0 && (() => {
-        const r = datos.alertas.hoy.filter(x => x.severidad === "roja").length;
-        const y = datos.alertas.hoy.filter(x => x.severidad === "amarilla").length;
-        const top = datos.alertas.hoy.filter(x => x.severidad === "roja").slice(0, 5);
+        const hoy = datos.alertas.hoy;
+        const r = hoy.filter(x => x.severidad === "roja").length;
+        const y = hoy.filter(x => x.severidad === "amarilla").length;
+        const logrados = hoy.filter(x => x.tono === "positiva" && x.progreso?.logrado).length;
+        const top = hoy.filter(x => x.severidad === "roja").slice(0, 5);
         return (
-          <div style={{ background: "#7f1d1d22", border: "1px solid #b91c1c55", borderRadius: 8, padding: "10px 14px", margin: "0 0 14px" }}>
+          <div style={{ background: "#ffffff0a", border: "1px solid #ffffff1f", borderRadius: 8, padding: "10px 14px", margin: "0 0 14px" }}>
             <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
               <strong style={{ color: "#fca5a5" }}>⚠ Alertas del día</strong>
               <span><b style={{ color: "#f87171" }}>{r} 🔴</b>&nbsp; <b style={{ color: "#fbbf24" }}>{y} 🟡</b></span>
+              {logrados > 0 && <span><b style={{ color: "#4ade80" }}>{logrados} 🟢</b> aceleradores logrados</span>}
               <span style={{ color: "#9ca3af" }}>· detalle en la pestaña «Alertas»</span>
             </div>
             {top.length > 0 && (

@@ -12,37 +12,57 @@ const fmtFecha = (iso: string) =>
   iso ? new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—";
 
 const TIPO_LABEL: Record<string, string> = {
-  llamadas:   "Pocas llamadas",
-  notReady:   "Not Ready alto",
-  conversion: "Conversión baja",
-  buzones:    "Buzones altos",
+  llamadas:     "Pocas llamadas",
+  notReady:     "Not Ready alto",
+  conversion:   "Conversión",
+  buzones:      "Buzones",
+  cobros:       "Cobros",
+  cash:         "Cash",
+  llamadas2min: "Llamadas >2min",
+  notReadyMin:  "Not Ready",
+  buzonesPct:   "Buzones",
 };
 
-function ListaAlertas({ titulo, alertas }: { titulo: string; alertas: Alerta[] }) {
-  const rojas = alertas.filter(a => a.severidad === "roja");
-  const amarillas = alertas.filter(a => a.severidad === "amarilla");
+const dot = (s: string) => (s === "roja" ? "🔴" : s === "amarilla" ? "🟡" : "🟢");
+
+function BarraProgreso({ actual, meta, logrado }: { actual: number; meta: number; logrado: boolean }) {
+  const pct = meta > 0 ? Math.min(100, Math.round((actual / meta) * 100)) : 0;
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ height: 8, background: "#374151", borderRadius: 6, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: logrado ? "#22c55e" : "#3b82f6" }} />
+      </div>
+      <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
+        {Math.round(actual)} / {Math.round(meta)} ({pct}%) {logrado ? "🎉 ¡Meta alcanzada!" : `faltan ${Math.max(0, Math.round(meta - actual))}`}
+      </div>
+    </div>
+  );
+}
+
+function ListaAlertas({ titulo, alertas, vacio }: { titulo: string; alertas: Alerta[]; vacio: string }) {
   return (
     <div className="tabla-wrap" style={{ flex: 1, minWidth: 320 }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #ffffff14", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <strong>{titulo}</strong>
-        <span style={{ fontSize: 13 }}>
-          <b style={{ color: "#f87171" }}>{rojas.length} 🔴</b>&nbsp;&nbsp;
-          <b style={{ color: "#fbbf24" }}>{amarillas.length} 🟡</b>
-        </span>
+        <span style={{ fontSize: 13, color: "#9ca3af" }}>{alertas.length}</span>
       </div>
       {alertas.length === 0 ? (
-        <div className="estado-vacio" style={{ padding: 20 }}>Sin alertas. 👍</div>
+        <div className="estado-vacio" style={{ padding: 20 }}>{vacio}</div>
       ) : (
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {[...rojas, ...amarillas].map((a, i) => (
+          {alertas.map((a, i) => (
             <li key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 16px", borderBottom: "1px solid #ffffff0d" }}>
-              <span style={{ fontSize: 14, lineHeight: "20px" }}>{a.severidad === "roja" ? "🔴" : "🟡"}</span>
-              <div>
+              <span style={{ fontSize: 14, lineHeight: "20px" }}>{dot(a.severidad)}</span>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600 }}>
                   {a.propietario}
-                  <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 12 }}> · {TIPO_LABEL[a.tipo] ?? a.tipo}</span>
+                  <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 12 }}>
+                    {" "}· {a.nombre ?? TIPO_LABEL[a.tipo] ?? a.tipo}
+                    {a.ambito === "equipo" ? " · equipo" : ""}
+                  </span>
                 </div>
                 <div style={{ fontSize: 13, color: "#d1d5db" }}>{a.mensaje}</div>
+                {a.progreso && <BarraProgreso {...a.progreso} />}
               </div>
             </li>
           ))}
@@ -50,6 +70,11 @@ function ListaAlertas({ titulo, alertas }: { titulo: string; alertas: Alerta[] }
       )}
     </div>
   );
+}
+
+function ordenar(arr: Alerta[]): Alerta[] {
+  const peso = (s: string) => (s === "roja" ? 0 : s === "amarilla" ? 1 : 2);
+  return [...arr].sort((a, b) => peso(a.severidad) - peso(b.severidad));
 }
 
 export default function TabAlertas() {
@@ -122,7 +147,18 @@ export default function TabAlertas() {
       {cargando && !datos ? (
         <div className="estado-carga"><span className="spinner" /> Cargando alertas…</div>
       ) : alertas ? (
-        <ListaAlertas titulo="Hoy (acumulado)" alertas={alertas.hoy} />
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <ListaAlertas
+            titulo="🟢 Aceleradores y positivas"
+            alertas={ordenar(alertas.hoy.filter(a => a.tono === "positiva"))}
+            vacio="Sin aceleradores configurados aún."
+          />
+          <ListaAlertas
+            titulo="🔴 A mejorar"
+            alertas={ordenar(alertas.hoy.filter(a => a.tono !== "positiva"))}
+            vacio="Todo en orden. 👍"
+          />
+        </div>
       ) : null}
     </div>
   );

@@ -323,28 +323,6 @@ export default function TabResumen() {
 
       {error && <div className="estado-error">⚠ {error}</div>}
 
-      {/* Franja de alertas (solo para el período "hoy") */}
-      {periodo === "hoy" && datos?.alertas && datos.alertas.hoy.length > 0 && (() => {
-        const hoy = datos.alertas.hoy;
-        const r = hoy.filter(x => x.severidad === "roja").length;
-        const y = hoy.filter(x => x.severidad === "amarilla").length;
-        const top = hoy.filter(x => x.severidad === "roja").slice(0, 5);
-        return (
-          <div style={{ background: "#ffffff0a", border: "1px solid #ffffff1f", borderRadius: 8, padding: "10px 14px", margin: "0 0 14px" }}>
-            <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
-              <strong style={{ color: "#fca5a5" }}>⚠ Alertas del día</strong>
-              <span><b style={{ color: "#f87171" }}>{r} 🔴</b>&nbsp; <b style={{ color: "#fbbf24" }}>{y} 🟡</b></span>
-              <span style={{ color: "#9ca3af" }}>· detalle en la pestaña «Alertas»</span>
-            </div>
-            {top.length > 0 && (
-              <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "#e5e7eb", fontSize: 13 }}>
-                {top.map((x, i) => (<li key={i}><b>{x.propietario}</b>: {x.mensaje}</li>))}
-              </ul>
-            )}
-          </div>
-        );
-      })()}
-
       {/* Tarjetas de totales */}
       {datos && (
         <div className="metricas-bar">

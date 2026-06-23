@@ -10,6 +10,7 @@ import TablaAdelantos from "@/components/TablaAdelantos";
 import TabResumen from "@/components/TabResumen";
 import TabMes from "@/components/TabMes";
 import TabAlertas from "@/components/TabAlertas";
+import CampanaAlertas from "@/components/CampanaAlertas";
 import { useEquipos } from "@/components/useEquipos";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
 
@@ -195,6 +196,7 @@ export default function Dashboard() {
           <span className="badge">tiempo real</span>
         </div>
         <div className="topbar-right">
+          <CampanaAlertas onVerTodas={() => setPestana("alertas")} />
           {esAdmin && (
             <Link href="/admin" className="btn-admin">
               ⚙ Administrar usuarios

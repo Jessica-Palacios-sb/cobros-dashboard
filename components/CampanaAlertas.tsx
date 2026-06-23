@@ -2,17 +2,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import type { Alerta } from "@/types/cobros";
+import { claveAlerta } from "@/lib/alertas";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { useAhora, tiempoRelativo } from "@/components/tiempoRelativo";
 
 interface ResultadoAlertas { alertas: Alerta[]; actualizadoEn: string }
 
 function hoyBogota() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
-}
-
-// Clave estable por alerta (sin el valor, para no re-notificar por cambios mínimos)
-function claveAlerta(a: Alerta): string {
-  return `${a.origen ?? "rel"}|${a.nombre ?? a.tipo}|${a.propietario}|${a.severidad}|${a.ventanaLabel ?? ""}`;
 }
 
 const dot = (s: string) => (s === "roja" ? "🔴" : s === "amarilla" ? "🟡" : "🟢");
@@ -28,6 +25,7 @@ export default function CampanaAlertas({ onVerTodas }: { onVerTodas: () => void 
   const [abierto, setAbierto] = useState(false);
   const [leidas, setLeidas] = useState<Set<string>>(new Set());
   const boxRef = useRef<HTMLDivElement>(null);
+  const ahora = useAhora();
 
   // Cargar set "leído" de localStorage (reinicia si cambió el día)
   useEffect(() => {
@@ -127,6 +125,7 @@ export default function CampanaAlertas({ onVerTodas }: { onVerTodas: () => void 
                       {a.ventanaLabel && <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: 11 }}> · {a.ventanaLabel}</span>}
                     </div>
                     <div style={{ fontSize: 12, color: "#d1d5db" }}>{a.mensaje}</div>
+                    {a.desde && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{tiempoRelativo(a.desde, ahora)}</div>}
                   </div>
                 </div>
               ))

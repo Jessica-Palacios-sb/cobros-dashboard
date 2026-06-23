@@ -40,6 +40,11 @@ const MIN_LLAMADAS_BUZONES  = 5;    // mínimo de llamadas para que el % de buzo
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Clave estable de una alerta (sin el valor) para rastrear "desde cuándo" y "leído". */
+export function claveAlerta(a: Alerta): string {
+  return `${a.origen ?? "rel"}|${a.nombre ?? a.tipo}|${a.propietario}|${a.severidad}|${a.ventanaLabel ?? ""}`;
+}
+
 function mediana(nums: number[]): number {
   if (nums.length === 0) return 0;
   const s = [...nums].sort((a, b) => a - b);

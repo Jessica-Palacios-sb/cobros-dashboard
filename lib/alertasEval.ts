@@ -5,7 +5,8 @@
 import { getResumen } from "@/lib/resumen";
 import { listReglas } from "@/lib/alertasConfig";
 import { getNombreEquipoMap } from "@/lib/equipo";
-import { evaluarReglas, type AgregadoAsesor, type AgregadoEquipo } from "@/lib/alertas";
+import { evaluarReglas, claveAlerta, type AgregadoAsesor, type AgregadoEquipo } from "@/lib/alertas";
+import { marcarYObtener } from "@/lib/alertasEstado";
 import type { Alerta, ReglaAlerta, ResultadoResumen } from "@/types/cobros";
 
 function hoyBogota(): string {
@@ -98,6 +99,10 @@ export async function evaluarAlertas(equipo?: string): Promise<ResultadoAlertas>
       out.push({ ...a, ventanaLabel: label });
     }
   }
+
+  // Estampar "desde" (primera detección) para mostrar "hace X min"
+  const desdeMap = await marcarYObtener(out.map(claveAlerta), hoy).catch(() => new Map<string, string>());
+  for (const a of out) a.desde = desdeMap.get(claveAlerta(a));
 
   return { alertas: out, actualizadoEn: new Date().toISOString() };
 }

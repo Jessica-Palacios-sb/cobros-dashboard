@@ -173,6 +173,7 @@ export interface Alerta {
   ambito?: "asesor" | "equipo";
   nombre?: string;              // nombre de la regla (config)
   ventanaLabel?: string;        // "Día" | "Semana" | "Mes" | "1–15 jun" (config)
+  desde?: string;               // ISO: primera vez que se detectó la alerta (para "hace X")
   progreso?: { actual: number; meta: number; logrado: boolean };
 }
 

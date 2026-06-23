@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Alerta } from "@/types/cobros";
 import { useEquipos } from "@/components/useEquipos";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { useAhora, tiempoRelativo } from "@/components/tiempoRelativo";
 
 interface ResultadoAlertas { alertas: Alerta[]; actualizadoEn: string; error?: string }
 
@@ -38,6 +39,7 @@ function BarraProgreso({ actual, meta, logrado }: { actual: number; meta: number
 }
 
 function ListaAlertas({ titulo, alertas, vacio }: { titulo: string; alertas: Alerta[]; vacio: string }) {
+  const ahora = useAhora();
   return (
     <div className="tabla-wrap" style={{ flex: 1, minWidth: 320 }}>
       <div style={{ padding: "12px 16px", borderBottom: "1px solid #ffffff14", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -65,6 +67,7 @@ function ListaAlertas({ titulo, alertas, vacio }: { titulo: string; alertas: Ale
                   )}
                 </div>
                 <div style={{ fontSize: 13, color: "#d1d5db" }}>{a.mensaje}</div>
+                {a.desde && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{tiempoRelativo(a.desde, ahora)}</div>}
                 {a.progreso && <BarraProgreso {...a.progreso} />}
               </div>
             </li>

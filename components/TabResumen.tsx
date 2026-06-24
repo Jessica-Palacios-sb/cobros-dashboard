@@ -5,6 +5,7 @@ import type { FilaResumen, ResultadoResumen } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 import { useEquipos } from "@/components/useEquipos";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { useOrdenFilas, ThOrden } from "@/components/ordenResumen";
 
 function hoyBogota() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
@@ -61,6 +62,7 @@ interface TablaResumenProps {
 }
 
 function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: TablaResumenProps) {
+  const orden     = useOrdenFilas();
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
   const totalAmt   = filas.reduce((s, f) => s + f.totalAmount, 0);
@@ -83,26 +85,26 @@ function TablaResumen({ filas, label, formatKey, onDetalle, onDetalleTotal }: Ta
         <table>
           <thead>
             <tr>
-              <th>{label === "Por hora" ? "Hora" : "Propietario"}</th>
-              <th style={{ textAlign: "right" }}>Cant</th>
-              <th style={{ textAlign: "right" }}>Cash Total</th>
-              <th style={{ textAlign: "right" }}>Ticket</th>
-              <th style={{ textAlign: "right" }}>% Cobros</th>
-              <th style={{ textAlign: "right" }}>Monto Factura</th>
-              <th style={{ textAlign: "right" }}>% Descuento</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Llamadas</th>
-              <th style={{ textAlign: "right" }} className="col-f9">&gt;2min</th>
-              <th style={{ textAlign: "right" }} className="col-f9">% &gt;2min</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Avg Talk</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Avg &gt;2min</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Buzones</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Buz&gt;40s</th>
-              <th style={{ textAlign: "right" }} className="col-f9">On Call</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Not Ready</th>
+              <ThOrden col="key" label={label === "Por hora" ? "Hora" : "Propietario"} align="left" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="cant" label="Cant" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="cashTotal" label="Cash Total" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="ticket" label="Ticket" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="pct" label="% Cobros" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="totalAmount" label="Monto Factura" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="discountPct" label="% Descuento" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="llamadas" label="Llamadas" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="llamadas2min" label=">2min" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="pct2min" label="% >2min" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="avgTalk" label="Avg Talk" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="avg2min" label="Avg >2min" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="buzones" label="Buzones" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="buzones40" label="Buz>40s" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="onCall" label="On Call" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="notReady" label="Not Ready" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
             </tr>
           </thead>
           <tbody>
-            {filas.map((f) => (
+            {orden.ordenar(filas).map((f) => (
               <tr key={f.key}>
                 <td>{formatKey(f.key)}</td>
                 <td style={{ textAlign: "right" }}>

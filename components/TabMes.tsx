@@ -4,6 +4,7 @@ import type { FilaDia, FilaResumen, ResultadoMes } from "@/types/cobros";
 import ModalDetalleResumen from "@/components/ModalDetalleResumen";
 import { useEquipos } from "@/components/useEquipos";
 import { useAutoRefresh } from "@/components/useAutoRefresh";
+import { useOrdenFilas, ThOrden } from "@/components/ordenResumen";
 
 const fmtUSD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const fmtNum = (n: number) => n.toLocaleString("es-CO");
@@ -202,6 +203,7 @@ interface TablaPropietarioProps {
 }
 
 function TablaPropietario({ filas, onDetalle }: TablaPropietarioProps) {
+  const orden     = useOrdenFilas();
   const total     = filas.reduce((s, f) => s + f.cant, 0);
   const totalCash = filas.reduce((s, f) => s + f.cashTotal, 0);
   const maxBuz40  = Math.max(...filas.map(f => f.five9?.buzones40seg ?? 0), 1);
@@ -213,24 +215,24 @@ function TablaPropietario({ filas, onDetalle }: TablaPropietarioProps) {
         <table>
           <thead>
             <tr>
-              <th>Propietario</th>
-              <th style={{ textAlign: "right" }}>Cant</th>
-              <th style={{ textAlign: "right" }}>Cash Total</th>
-              <th style={{ textAlign: "right" }}>Ticket</th>
-              <th style={{ textAlign: "right" }}>% Total</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Llamadas</th>
-              <th style={{ textAlign: "right" }} className="col-f9">&gt;2min</th>
-              <th style={{ textAlign: "right" }} className="col-f9">% &gt;2min</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Avg Talk</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Avg &gt;2min</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Buzones</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Buz&gt;40s</th>
-              <th style={{ textAlign: "right" }} className="col-f9">On Call</th>
-              <th style={{ textAlign: "right" }} className="col-f9">Not Ready</th>
+              <ThOrden col="key" label="Propietario" align="left" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="cant" label="Cant" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="cashTotal" label="Cash Total" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="ticket" label="Ticket" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="pct" label="% Total" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="llamadas" label="Llamadas" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="llamadas2min" label=">2min" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="pct2min" label="% >2min" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="avgTalk" label="Avg Talk" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="avg2min" label="Avg >2min" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="buzones" label="Buzones" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="buzones40" label="Buz>40s" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="onCall" label="On Call" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
+              <ThOrden col="notReady" label="Not Ready" className="col-f9" sortCol={orden.col} sortDir={orden.dir} onSort={orden.onSort} />
             </tr>
           </thead>
           <tbody>
-            {filas.map(f => (
+            {orden.ordenar(filas).map(f => (
               <tr key={f.key}>
                 <td>{f.key || "—"}</td>
                 <td style={{ textAlign: "right" }}>

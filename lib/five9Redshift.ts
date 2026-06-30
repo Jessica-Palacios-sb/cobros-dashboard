@@ -4,9 +4,25 @@
 // Se unen dos tablas: tiempos_conexion (login/onCall/notReady) + call_log (llamadas).
 
 import { runQuery } from "@/lib/redshift";
-import type { Five9Row } from "@/lib/five9";
+import { getFive9Hoy, type Five9Row } from "@/lib/five9";
+import { getFive9HoyCache, setFive9HoyCache } from "@/lib/cache";
 
 type Param = string | number | boolean | null;
+
+/**
+ * Five9 de hoy (API en vivo) con caché corto (5 min) en KV.
+ * Generar los reportes Five9 es lento; este caché evita re-generarlos en cada
+ * refresco/recarga del Resumen. El primer pedido del periodo lo paga; los siguientes
+ * (dentro de 5 min) son inmediatos.
+ */
+export async function getFive9HoyCacheado(corte: string): Promise<Five9Row[]> {
+  const cache = await getFive9HoyCache(corte);
+  if (cache) return cache;
+  const nameMap = await getAgentNameMap();
+  const rows = await getFive9Hoy(corte, nameMap);
+  await setFive9HoyCache(corte, rows);
+  return rows;
+}
 
 // El driver pg convierte columnas DATE a objetos JavaScript Date.
 // String(date).substring(0,10) produce "Thu Apr 30..." en lugar de "2026-04-30".

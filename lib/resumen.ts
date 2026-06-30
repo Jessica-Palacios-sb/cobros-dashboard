@@ -14,8 +14,8 @@ import {
   gestorWhereCobrosRS, gestorWhereAdelantosRS,
   gestorEfectivoSF, gestorEfectivoRS, pasaFiltroGestorSF, pasaFiltroGestorAdelantoSF,
 } from "@/lib/gestorFiltro";
-import { getFive9Hoy, type Five9Row } from "@/lib/five9";
-import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
+import type { Five9Row } from "@/lib/five9";
+import { getFive9Historico, getFive9HoyCacheado } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
 import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
 import { calcularAlertas, type AgregadoAsesor } from "@/lib/alertas";
@@ -395,8 +395,7 @@ export async function getResumen(
 
   // Five9 de hoy (API) — siempre en vivo
   const f9HoyP = f9Activo && incluyeHoy
-    ? getAgentNameMap()
-        .then(nameMap => getFive9Hoy(corte, nameMap))
+    ? getFive9HoyCacheado(corte)
         .catch((e: any) => { five9Error = String(e?.message ?? e); return [] as Five9Row[]; })
     : Promise.resolve<Five9Row[]>([]);
 

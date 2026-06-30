@@ -4,6 +4,8 @@ import type { Five9Row } from "@/lib/five9";
 
 const REDSHIFT_CACHE_KEY = "cobros:redshift:snapshot";
 const RESUMEN_CACHE_KEY  = "cobros:resumen:snapshot";
+const FIVE9_HOY_PREFIX   = "cobros:five9hoy:";   // por fecha; TTL corto
+const FIVE9_HOY_TTL_SEG  = 300;                  // 5 min
 
 /** Snapshot a nivel pago que alimenta Resumen / Vista Mes / Detalle. */
 export interface ResumenSnapshot {
@@ -65,4 +67,21 @@ export async function getResumenSnapshot(): Promise<ResumenSnapshot | null> {
 export async function getCacheMeta(): Promise<{ updatedAt: string | null }> {
   const snap = await getResumenSnapshot();
   return { updatedAt: snap?.updatedAt ?? null };
+}
+
+// ─── Five9 de hoy (caché corto, evita re-generar reportes en cada refresco) ───
+
+export async function getFive9HoyCache(fecha: string): Promise<Five9Row[] | null> {
+  try {
+    const data = await kv.get<Five9Row[]>(FIVE9_HOY_PREFIX + fecha);
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setFive9HoyCache(fecha: string, rows: Five9Row[]): Promise<void> {
+  try {
+    await kv.set(FIVE9_HOY_PREFIX + fecha, rows, { ex: FIVE9_HOY_TTL_SEG });
+  } catch { /* no bloquear si KV falla */ }
 }

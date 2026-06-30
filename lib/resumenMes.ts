@@ -13,8 +13,8 @@ import type {
   FilaDia, FilaHoraMes, FilaFive9Metricas, FilaResumen, ResultadoMes,
   FactCobro, FactAdelanto,
 } from "@/types/cobros";
-import { getFive9Hoy, type Five9Row } from "@/lib/five9";
-import { getFive9Historico, getAgentNameMap } from "@/lib/five9Redshift";
+import type { Five9Row } from "@/lib/five9";
+import { getFive9Historico, getFive9HoyCacheado } from "@/lib/five9Redshift";
 import { getResumenSnapshot } from "@/lib/cache";
 import { getNombreEquipoMap, pasaEquipo } from "@/lib/equipo";
 
@@ -456,8 +456,7 @@ export async function getResumenMes(
 
   // Five9 API: solo hoy (cuando el mes actual está seleccionado) — siempre en vivo
   const f9HoyP = f9Activo && incluyeHoy
-    ? getAgentNameMap()
-        .then(m => getFive9Hoy(corte, m))
+    ? getFive9HoyCacheado(corte)
         .catch((e: any) => {
           f9Errors.push(`API: ${String(e?.message ?? e)}`);
           return [] as Five9Row[];
